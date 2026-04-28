@@ -7,10 +7,8 @@ headers = []
   [functions."*"]
 
 [build]
-publish = "/Users/tomas/Desktop/claude code dir/6 - LA TAVERNA/app/dist"
+publish = "."
 publishOrigin = "config"
-commandOrigin = "config"
-command = "npm run build"
 
   [build.environment]
 
