@@ -3,14 +3,15 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { PRESET_MONSTERS, CONDITIONS } from '../../data/characters'
-import { Plus, SkipForward, Shield, X, Trash2, Dice6, ChevronUp, ChevronDown } from 'lucide-react'
+import { Plus, SkipForward, Shield, X, Trash2, Dice6, ChevronUp, ChevronDown, Search } from 'lucide-react'
 
 const DICE = [4, 6, 8, 10, 12, 20, 100]
 
 function rollDie(sides) { return Math.floor(Math.random() * sides) + 1 }
 
 export default function CombatPage() {
-  const { isDM } = useAuth()
+  const { isDM, profile } = useAuth()
+  const myCharacterId = profile?.character_id || null
   const isMobile = useIsMobile()
   const [session, setSession] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -312,6 +313,7 @@ export default function CombatPage() {
               participant={p}
               isActive={idx === session.current_turn}
               isDM={isDM}
+              isOwnCharacter={!isDM && myCharacterId && p.char_id === myCharacterId}
               isFirst={idx === 0}
               isLast={idx === participants.length - 1}
               onUpdate={(updates) => updateParticipant(p.id, updates)}
@@ -367,17 +369,44 @@ export default function CombatPage() {
   )
 }
 
-function ParticipantRow({ participant: p, isActive, isDM, isFirst, isLast, onUpdate, onRemove, onToggleCondition, onMoveUp, onMoveDown }) {
+function hpStatusLabel(pct) {
+  if (pct >= 90) return 'Illeso'
+  if (pct >= 60) return 'Lievemente ferito'
+  if (pct >= 35) return 'Ferito'
+  if (pct >= 10) return 'Gravemente ferito'
+  if (pct > 0) return 'In fin di vita'
+  return 'Abbattuto'
+}
+
+function ParticipantRow({ participant: p, isActive, isDM, isOwnCharacter, isFirst, isLast, onUpdate, onRemove, onToggleCondition, onMoveUp, onMoveDown }) {
   const [editingHP, setEditingHP] = useState(false)
   const [hpInput, setHpInput] = useState('')
   const [showConditions, setShowConditions] = useState(false)
   const [hpDelta, setHpDelta] = useState('')
+  const [avatarUrl, setAvatarUrl] = useState(p.avatar_url || null)
   const isMobile = useIsMobile()
+
+  // Carica avatar del personaggio collegato (cache locale per evitare query ripetute)
+  useEffect(() => {
+    if (avatarUrl || !p.char_id) return
+    let cancelled = false
+    supabase.from('characters').select('data').eq('id', p.char_id).single()
+      .then(({ data }) => {
+        if (cancelled) return
+        if (data?.data?.avatar_url) setAvatarUrl(data.data.avatar_url)
+      })
+    return () => { cancelled = true }
+  }, [p.char_id, avatarUrl])
 
   const hpCurrent = p.hp_current ?? p.hp_max
   const hpPct = Math.max(0, Math.min(100, (hpCurrent / p.hp_max) * 100))
   const hpColor = hpPct > 60 ? '#22c55e' : hpPct > 25 ? '#f59e0b' : '#ef4444'
   const isDead = hpCurrent <= 0
+
+  // Privacy: solo DM e proprietario del PG vedono i numeri esatti.
+  // Tutti gli altri vedono lo stato qualitativo (barra senza numero).
+  const canSeeExactHP = isDM || isOwnCharacter
+  const canEditHP = isDM
 
   function submitHP(e) {
     e?.preventDefault()
@@ -408,10 +437,15 @@ function ParticipantRow({ participant: p, isActive, isDM, isFirst, isLast, onUpd
           <div style={{ fontSize: '0.85rem', fontWeight: 800, color: isActive ? '#a78bfa' : '#f1f5f9', lineHeight: 1 }}>{p.initiative}</div>
         </div>
 
-        {/* Color circle + name */}
-        <div style={{ width: 28, height: 28, borderRadius: '50%', background: p.color || '#7c3aed', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.6rem', fontWeight: 700, color: '#fff' }}>
-          {(p.name || '?').slice(0, 2).toUpperCase()}
-        </div>
+        {/* Avatar/cerchio del partecipante */}
+        {avatarUrl ? (
+          <img src={avatarUrl} alt={p.name}
+            style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, objectFit: 'cover', border: `2px solid ${p.color || '#7c3aed'}` }} />
+        ) : (
+          <div style={{ width: 32, height: 32, borderRadius: '50%', background: p.color || '#7c3aed', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.65rem', fontWeight: 700, color: '#fff' }}>
+            {(p.name || '?').slice(0, 2).toUpperCase()}
+          </div>
+        )}
 
         <div style={{ flex: 1, overflow: 'hidden', minWidth: 80 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -433,27 +467,37 @@ function ParticipantRow({ participant: p, isActive, isDM, isFirst, isLast, onUpd
           )}
         </div>
 
-        {/* AC */}
-        <div style={{ textAlign: 'center', flexShrink: 0 }}>
-          <div style={{ fontSize: '0.55rem', color: '#64748b', textTransform: 'uppercase' }}>CA</div>
-          <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#94a3b8' }}>{p.ac}</div>
-        </div>
+        {/* AC — visibile solo a DM e proprietario del PG */}
+        {canSeeExactHP && (
+          <div style={{ textAlign: 'center', flexShrink: 0 }}>
+            <div style={{ fontSize: '0.55rem', color: '#64748b', textTransform: 'uppercase' }}>CA</div>
+            <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#94a3b8' }}>{p.ac}</div>
+          </div>
+        )}
 
         {/* HP */}
         <div style={{ minWidth: 90, flexShrink: 0 }}>
-          {editingHP && isDM ? (
+          {editingHP && canEditHP ? (
             <form onSubmit={submitHP} style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
               <input className="input" type="number" value={hpInput} onChange={e => setHpInput(e.target.value)} style={{ width: 60, fontSize: '0.85rem', fontWeight: 700 }} autoFocus onBlur={submitHP} />
               <span style={{ color: '#64748b', fontSize: '0.75rem' }}>/{p.hp_max}</span>
             </form>
-          ) : (
-            <div style={{ cursor: isDM ? 'pointer' : 'default', padding: '2px 4px', borderRadius: 4 }}
-              onClick={() => { if (isDM) { setHpInput(hpCurrent.toString()); setEditingHP(true) } }}
+          ) : canSeeExactHP ? (
+            <div style={{ cursor: canEditHP ? 'pointer' : 'default', padding: '2px 4px', borderRadius: 4 }}
+              onClick={() => { if (canEditHP) { setHpInput(hpCurrent.toString()); setEditingHP(true) } }}
             >
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 3 }}>
                 <span style={{ fontSize: '1rem', fontWeight: 800, color: hpColor }}>{hpCurrent}</span>
                 <span style={{ fontSize: '0.7rem', color: '#64748b' }}>/{p.hp_max}</span>
               </div>
+              <div className="hp-bar-bg" style={{ width: 80, marginTop: 2 }}>
+                <div className="hp-bar-fill" style={{ width: `${hpPct}%`, background: hpColor }} />
+              </div>
+            </div>
+          ) : (
+            // Privacy: solo barra qualitativa + etichetta stato
+            <div style={{ padding: '2px 4px' }}>
+              <div style={{ fontSize: '0.7rem', color: hpColor, fontWeight: 600 }}>{hpStatusLabel(hpPct)}</div>
               <div className="hp-bar-bg" style={{ width: 80, marginTop: 2 }}>
                 <div className="hp-bar-fill" style={{ width: `${hpPct}%`, background: hpColor }} />
               </div>
@@ -520,6 +564,7 @@ function ParticipantRow({ participant: p, isActive, isDM, isFirst, isLast, onUpd
 function AddParticipantModal({ onAdd, onClose }) {
   const [tab, setTab] = useState('personaggio')
   const [characters, setCharacters] = useState([])
+  const [monsterSearch, setMonsterSearch] = useState('')
   const [form, setForm] = useState({ name: '', hp_max: 10, ac: 10, initiative: 10, initiative_bonus: 0, is_enemy: false, color: '#7c3aed' })
 
   useEffect(() => {
@@ -539,6 +584,7 @@ function AddParticipantModal({ onAdd, onClose }) {
       is_enemy: false,
       color: char.color,
       char_id: char.id,
+      avatar_url: char.avatar_url || null,
     })
   }
 
@@ -599,21 +645,31 @@ function AddParticipantModal({ onAdd, onClose }) {
         )}
 
         {tab === 'mostro' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
-            {PRESET_MONSTERS.map(m => (
-              <button key={m.name} onClick={() => fromMonster(m)} style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
-                background: '#0d0f18', border: '1px solid #252840', borderRadius: 8, padding: '0.625rem 0.75rem',
-                cursor: 'pointer', transition: 'border-color 0.15s', textAlign: 'left',
-              }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = '#ef4444'}
-                onMouseLeave={e => e.currentTarget.style.borderColor = '#252840'}
-              >
-                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#f1f5f9' }}>{m.name}</span>
-                <span style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 2 }}>PF {m.hp_max} · CA {m.ac}</span>
-              </button>
-            ))}
-          </div>
+          <>
+            <div style={{ position: 'relative', marginBottom: 8 }}>
+              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+              <input className="input" value={monsterSearch} onChange={e => setMonsterSearch(e.target.value)}
+                placeholder={`Cerca tra ${PRESET_MONSTERS.length} mostri…`}
+                style={{ paddingLeft: 32, width: '100%' }} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, maxHeight: '50vh', overflow: 'auto' }}>
+              {PRESET_MONSTERS
+                .filter(m => !monsterSearch || m.name.toLowerCase().includes(monsterSearch.toLowerCase()))
+                .map(m => (
+                  <button key={m.name} onClick={() => fromMonster(m)} style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'flex-start',
+                    background: '#0d0f18', border: '1px solid #252840', borderRadius: 8, padding: '0.625rem 0.75rem',
+                    cursor: 'pointer', transition: 'border-color 0.15s', textAlign: 'left',
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = '#ef4444'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = '#252840'}
+                  >
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#f1f5f9' }}>{m.name}</span>
+                    <span style={{ fontSize: '0.7rem', color: '#64748b', marginTop: 2 }}>PF {m.hp_max} · CA {m.ac}</span>
+                  </button>
+                ))}
+            </div>
+          </>
         )}
 
         {tab === 'manuale' && (

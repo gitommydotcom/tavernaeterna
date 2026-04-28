@@ -1,112 +1,377 @@
-import { useState, useMemo } from 'react'
-import { Wand2, BookOpen, Scroll, Table2, RefreshCw, ChevronDown, ChevronUp, Search } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { Wand2, BookOpen, Scroll, Table2, RefreshCw, ChevronDown, ChevronUp, Search, X, Loader, Info } from 'lucide-react'
 import { MONSTERS } from '../../data/monsters_it'
-import { getAllSpells } from '../../lib/srd'
+import { getAllSpells, lookupSpell, lookupTrait, lookupWithGroqFallback } from '../../lib/srd'
 
-// ─── Generators ─────────────────────────────────────────────────────────────
+// ─── Utility ─────────────────────────────────────────────────────────────────
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)] }
+function pickN(arr, n) {
+  const copy = [...arr]; const out = []
+  while (out.length < n && copy.length) {
+    const idx = Math.floor(Math.random() * copy.length)
+    out.push(copy.splice(idx, 1)[0])
+  }
+  return out
+}
+function rollDice(n, sides, mod = 0) {
+  let total = 0
+  for (let i = 0; i < n; i++) total += Math.floor(Math.random() * sides) + 1
+  return total + mod
+}
+function mod(v) { const m = Math.floor((v - 10) / 2); return (m >= 0 ? '+' : '') + m }
 
-const NOMI_MASCHILI = ['Aldric','Beron','Caius','Dorian','Edric','Faelen','Gorath','Hadvar','Ivar','Jorin','Kael','Loric','Marek','Niran','Orin','Peran','Quinn','Roven','Solan','Theron','Ulric','Varen','Wulfric','Xander','Yoren','Zavan','Brennan','Cormac','Drust','Eamon','Fionn','Gareth','Heric','Idris','Jovan','Kevan']
-const NOMI_FEMMINILI = ['Aela','Brynn','Caris','Deva','Elia','Faera','Gwendolyn','Hana','Isara','Jira','Kira','Lyra','Mira','Nira','Oriel','Petra','Ressa','Syla','Tara','Ursula','Vela','Wren','Xara','Ysa','Zora','Ailis','Brea','Catriona','Deirdre','Eithne','Fiadh','Grainne']
-const COGNOMI = ['Fabbro','Falco','Grano','Luna','Monte','Nebbia','Notte','Pietra','Quercia','Roccia','Rosa','Sabbia','Scudo','Selva','Serra','Sogno','Spada','Stella','Tempra','Torre','Tuono','Vento','Vetta','Viola','Vipera','Alba','Ferro','Fiamma','Ombra','Osso','Radice','Ramo']
-const NOMI_ELFICI_M = ['Aerindel','Caladwen','Erevan','Faeron','Galathil','Ilrune','Laucian','Mirdan','Naevys','Quarion','Riardon','Soveliss','Thamior','Varis','Yaerelon']
-const NOMI_ELFICI_F = ['Adrie','Bethrynna','Caelynn','Drusilia','Enna','Felosial','Iefyr','Keyleth','Leshanna','Mialee','Naivara','Quelenna','Sariel','Thiala','Vadania']
-const NOMI_NANI_M = ['Adrik','Baern','Darrak','Delg','Eberk','Fargrim','Gardain','Harbek','Kildrak','Morgran','Orsik','Oskar','Rangrim','Rurik','Taklinn']
-const NOMI_NANI_F = ['Amber','Artin','Audhild','Bardryn','Dagnal','Diesa','Eldeth','Falkrunn','Gunnloda','Gurdis','Helja','Hilund','Ilde','Liftrasa','Mardred']
-const AGGETTIVI_TAVERNA = ['Il Drago','Il Leone','La Fenice','Il Grifone','Il Lupo','La Sirena','L\'Aquila','Il Cigno','La Volpe','Il Corvo','Il Cervo','Il Cinghiale','L\'Orso','La Vipera','Il Capro','Il Serpente']
-const NOMI_TAVERNA = ['Dorato','Ubriaco','Stanco','Saggio','Muto','Danzante','Addormentato','Ridente','Antico','Segreto','Fortunato','Maledetto','Incoronato','Ferito','Dimenticato','Assetato']
-const METEO = ['Cielo sereno e soleggiato','Nuvole sparse, brezza fresca','Nebbia mattutina che si dirada','Pioggia leggera e costante','Temporale con tuoni in lontananza','Vento forte da nord','Neve leggera','Tormenta di neve','Caldo afoso e umido','Cielo coperto, atmosfera opprimente','Vento caldo del sud','Pioggia battente con lampi','Ghiaccio notturno, mattino gelido','Grandine improvvisa','Arcobaleno doppio dopo la pioggia','Nebbia fitta che non si dirada']
-const AGGETTIVI_PNG = ['Diffidente','Allegro','Cupo','Nervoso','Curioso','Arrogante','Umile','Sospettoso','Generoso','Avaro','Coraggioso','Codardo','Eloquente','Balbuziente','Misterioso','Aperto','Melanconico','Fanatico','Pragmatico','Idealista']
-const MOTIVAZIONI_PNG = ['cerca vendetta per un torto subito','vuole proteggere la propria famiglia','è in fuga da qualcosa o qualcuno','desidera ricchezze ad ogni costo','persegue un ideale con fede cieca','nasconde un segreto pericoloso','è ossessionato dal passato','cerca redenzione per un errore','vuole solo sopravvivere un altro giorno','ha perso tutto e non ha più nulla da perdere','vuole dimostrare il proprio valore','mira a scalare la gerarchia sociale','serve un\'entità superiore','vuole trovare una persona scomparsa']
-const SEGRETI_PNG = ['Ha ucciso qualcuno in passato','Lavora per il nemico','È in realtà nobile decaduto','Indossa un travestimento permanente','Deve denaro agli uomini sbagliati','Ha un figlio segreto','È maledetto da una divinità','Possiede un artefatto rubato','Conosce la posizione di un tesoro','È immortale ma lo nasconde','È una spia di un regno nemico','Ha fatto un patto con un diavolo','Sa dove si nasconde un ricercato','Sta cercando di disertare']
-const OCCUPAZIONI_PNG = ['Mercante','Soldato','Chierico','Fabbro','Agricoltore','Pescatore','Guardia','Cuoco','Ladro','Mago itinerante','Araldo','Guaritore','Nobile decaduto','Marinaio','Cacciatore','Minatore','Cantastorie','Spia']
-const AGGETTIVI_LOCANDA = ['La Lanterna','Il Calice','La Coppa','Il Barile','La Fiamma','Il Portale','Il Crocevia','Il Rifugio','La Meridiana','Il Mantello','Il Focolare','La Pergola']
-const NOMI_LOCANDA = ['dell\'Alba','del Tramonto','del Viandante','del Guerriero','del Saggio','della Fortuna','dell\'Avventura','del Destino','del Pellegrino','del Dragone','del Mercante','del Cacciatore']
+// ─── Pool dati ───────────────────────────────────────────────────────────────
+const NOMI_M = ['Aldric','Beron','Caius','Dorian','Edric','Faelen','Gorath','Hadvar','Ivar','Jorin','Kael','Loric','Marek','Niran','Orin','Peran','Quinn','Roven','Solan','Theron','Ulric','Varen','Wulfric','Xander','Yoren','Zavan','Brennan','Cormac','Drust','Eamon','Fionn','Gareth','Heric','Idris','Jovan','Kevan','Adelmo','Baltasar','Corrado','Dante','Ezio','Folco','Gualtiero']
+const NOMI_F = ['Aela','Brynn','Caris','Deva','Elia','Faera','Gwendolyn','Hana','Isara','Jira','Kira','Lyra','Mira','Nira','Oriel','Petra','Ressa','Syla','Tara','Ursula','Vela','Wren','Xara','Ysa','Zora','Ailis','Brea','Catriona','Deirdre','Eithne','Fiadh','Grainne','Adelaide','Bianca','Costanza','Diamante','Eleonora','Fiammetta','Genoveffa','Isolda']
+const COGNOMI = ['Fabbro','Falco','Grano','Luna','Monte','Nebbia','Notte','Pietra','Quercia','Roccia','Rosa','Sabbia','Scudo','Selva','Serra','Sogno','Spada','Stella','Tempra','Torre','Tuono','Vento','Vetta','Viola','Vipera','Alba','Ferro','Fiamma','Ombra','Osso','Radice','Ramo','Sole','Crepuscolo','Argento','Bronzo','Cervo','Lince','Aquila','Vespa','Spina','Foglia','Mare','Fiume','Ghiaccio','Marmo','Ruggine']
+const NOMI_ELFICI_M = ['Aerindel','Caladwen','Erevan','Faeron','Galathil','Ilrune','Laucian','Mirdan','Naevys','Quarion','Riardon','Soveliss','Thamior','Varis','Yaerelon','Aelar','Beiro','Carric','Enialis','Heian','Mindartis','Paelias','Theren']
+const NOMI_ELFICI_F = ['Adrie','Bethrynna','Caelynn','Drusilia','Enna','Felosial','Iefyr','Keyleth','Leshanna','Mialee','Naivara','Quelenna','Sariel','Thiala','Vadania','Anastrianna','Birel','Faral','Lia','Meriele','Quillathe','Shanairra','Valanthe']
+const NOMI_NANI_M = ['Adrik','Baern','Darrak','Delg','Eberk','Fargrim','Gardain','Harbek','Kildrak','Morgran','Orsik','Oskar','Rangrim','Rurik','Taklinn','Thoradin','Tordek','Travok','Vondal']
+const NOMI_NANI_F = ['Amber','Artin','Audhild','Bardryn','Dagnal','Diesa','Eldeth','Falkrunn','Gunnloda','Gurdis','Helja','Hilund','Ilde','Liftrasa','Mardred','Riswynn','Sannl','Torbera','Vistra']
+const NOMI_HALFLING = ['Alton','Beau','Cade','Eldon','Errich','Finnan','Garret','Lindal','Lyle','Merric','Milo','Nedda','Osborn','Perrin','Reed','Roscoe','Wellby','Andry','Bree','Callie','Dee','Emma','Lavinia','Lidda','Merla','Nedda','Paela','Portia','Seraphina','Trym','Vani','Verna']
+const NOMI_DRAGONIDI = ['Arjhan','Balasar','Bharash','Donaar','Ghesh','Heskan','Kriv','Medrash','Nadarr','Patrin','Rhogar','Shamash','Akra','Biri','Daar','Farideh','Harann','Havilar','Jheri','Kava','Korinn','Mishann','Nala','Perra','Raiann','Sora','Surina','Thava']
+const TITOLI_NOBILE = ['Conte','Contessa','Visconte','Viscontessa','Marchese','Marchesa','Barone','Baronessa','Cavaliere','Dama','Lord','Lady','Duca','Duchessa']
 
-const TIPO_STANZA = ['Sala del trono abbandonata','Armeria saccheggiata','Cella di prigione','Laboratorio del mago','Cripta con bare aperte','Sala dei banchetti in rovina','Biblioteca polverosa','Camera delle torture','Tempio profanato','Cucina dei mostri','Stanza dei trofei','Caverna naturale','Deposito di rune magiche','Santuario nascosto']
-const CARATTERISTICHE_STANZA = ['Un pozzo al centro senza fondo visibile','Rune incandescenti sui muri','Un odore di zolfo nell\'aria','Tracce di sangue secco sul pavimento','Un altare rotto','Ossa sparse ovunque','Un libro aperto su un leggio','Specchi che riflettono immagini distorte','Una porta segreta dietro un arazzo','Ragnatele enormi che coprono il soffitto','Un buco nel pavimento da cui sale vapore','Una mappa incisa nella pietra']
-const TRAPPOLE_STANZA = ['Nessuna trappola','Frecce dalle pareti (CD 14 DES)','Pavimento cedevole (CD 12 DES)','Gas soporifero (CD 13 COS)','Statua con occhi laser (CD 15 DES)','Fossa con pali (CD 14 DES)']
+const AGG_TAVERNA = ['Il Drago','Il Leone','La Fenice','Il Grifone','Il Lupo','La Sirena','L\'Aquila','Il Cigno','La Volpe','Il Corvo','Il Cervo','Il Cinghiale','L\'Orso','La Vipera','Il Capro','Il Serpente','La Lanterna','Il Calice','La Coppa','Il Barile','La Fiamma','Il Crocevia','Il Rifugio','La Meridiana','Il Mantello','Il Focolare','La Pergola','Il Boccale','La Ruota','Il Martello','Il Vello','La Stella','Il Cappuccio']
+const NOMI_TAVERNA = ['Dorato','Ubriaco','Stanco','Saggio','Muto','Danzante','Addormentato','Ridente','Antico','Segreto','Fortunato','Maledetto','Incoronato','Ferito','Dimenticato','Assetato','dell\'Alba','del Tramonto','del Viandante','del Guerriero','del Pellegrino','del Mercante','del Cacciatore','d\'Argento','di Pietra','del Drago','d\'Oro']
+
+const METEO = ['Cielo sereno e soleggiato','Nuvole sparse, brezza fresca','Nebbia mattutina che si dirada','Pioggia leggera e costante','Temporale con tuoni in lontananza','Vento forte da nord','Neve leggera che si posa','Tormenta di neve violenta','Caldo afoso e umido','Cielo coperto, atmosfera opprimente','Vento caldo del sud (sirocco)','Pioggia battente con lampi','Ghiaccio notturno, mattino gelido','Grandine improvvisa','Arcobaleno doppio dopo la pioggia','Nebbia fitta che non si dirada','Aurora boreale rara','Vento gelido che taglia il viso','Pioggia colorata (presagio)','Aria immobile, silenzio innaturale','Nubi a forma di drago','Sole pallido velato di ceneri','Foschia rossastra al tramonto']
+
+const AGG_PNG = ['Diffidente','Allegro','Cupo','Nervoso','Curioso','Arrogante','Umile','Sospettoso','Generoso','Avaro','Coraggioso','Codardo','Eloquente','Balbuziente','Misterioso','Aperto','Melanconico','Fanatico','Pragmatico','Idealista','Cinico','Ingenuo','Ambizioso','Pacato','Esuberante','Riservato','Romantico','Spietato']
+const MOTIVAZIONI_PNG = ['cerca vendetta per un torto subito','vuole proteggere la propria famiglia','è in fuga da qualcosa o qualcuno','desidera ricchezze ad ogni costo','persegue un ideale con fede cieca','nasconde un segreto pericoloso','è ossessionato dal passato','cerca redenzione per un errore','vuole solo sopravvivere un altro giorno','ha perso tutto e non ha più nulla da perdere','vuole dimostrare il proprio valore','mira a scalare la gerarchia sociale','serve un\'entità superiore','vuole trovare una persona scomparsa','è alla ricerca di un artefatto perduto','vuole abbandonare la sua vecchia identità','cerca di placare un\'antica colpa','vuole liberare qualcuno dalla prigionia']
+const SEGRETI_PNG = ['Ha ucciso qualcuno in passato','Lavora per il nemico','È in realtà nobile decaduto','Indossa un travestimento permanente','Deve denaro agli uomini sbagliati','Ha un figlio segreto','È maledetto da una divinità','Possiede un artefatto rubato','Conosce la posizione di un tesoro','È immortale ma lo nasconde','È una spia di un regno nemico','Ha fatto un patto con un diavolo','Sa dove si nasconde un ricercato','Sta cercando di disertare','È un licantropo','È in realtà un druido sotto copertura','Sente voci che gli parlano','Ha venduto l\'anima per un favore','Ricorda una vita passata','Ha visto qualcosa che non doveva vedere']
+const OCCUPAZIONI = ['Mercante','Soldato','Chierico','Fabbro','Agricoltore','Pescatore','Guardia','Cuoco','Ladro','Mago itinerante','Araldo','Guaritore','Nobile decaduto','Marinaio','Cacciatore','Minatore','Cantastorie','Spia','Boia','Esattore tasse','Locandiere','Bardo girovago','Mendicante','Stalliere','Erborista','Sarta','Becchino','Calzolaio','Panettiere','Stampatore']
+const TIC_NERVOSI = ['si tira sempre la barba','sussurra prima di parlare ad alta voce','batte le dita ritmicamente','evita lo sguardo diretto','schiocca le nocche','sorride quando è teso','ha un occhio che gli trema','tossicchia spesso','si tocca un amuleto','muove la testa scattando come un uccello']
+
+const TIPO_STANZA = ['Sala del trono abbandonata','Armeria saccheggiata','Cella di prigione','Laboratorio del mago','Cripta con bare aperte','Sala dei banchetti in rovina','Biblioteca polverosa','Camera delle torture','Tempio profanato','Cucina dei mostri','Stanza dei trofei','Caverna naturale','Deposito di rune magiche','Santuario nascosto','Mausoleo allagato','Sala degli specchi','Pozzo dei sacrifici','Refettorio infestato','Aula degli studi arcani','Stalla per cavalcature mostruose','Vivaio di funghi giganti','Sala delle fontane bianche','Gabinetto di curiosità','Magazzino di trofei di guerra']
+const CARATTERISTICHE_STANZA = ['Un pozzo al centro senza fondo visibile','Rune incandescenti sui muri','Un odore di zolfo nell\'aria','Tracce di sangue secco sul pavimento','Un altare rotto','Ossa sparse ovunque','Un libro aperto su un leggio','Specchi che riflettono immagini distorte','Una porta segreta dietro un arazzo','Ragnatele enormi che coprono il soffitto','Un buco nel pavimento da cui sale vapore','Una mappa incisa nella pietra','Stalattiti taglienti dal soffitto','Lampade che si accendono al passaggio','Uno scheletro incatenato al muro','Un quadro che sembra seguire chi entra','Un mucchio di monete polverose','Una statua coperta da un panno','Bracieri che bruciano senza combustibile','Una pozza d\'acqua perfettamente quieta','Un\'eco innaturale','Vento freddo da una crepa nascosta','Bisbigli appena udibili in lingua arcana']
+const TRAPPOLE_STANZA = ['Nessuna trappola','Frecce dalle pareti (CD 14 DES, 2d6 perforanti)','Pavimento cedevole (CD 12 DES, caduta 6 m)','Gas soporifero (CD 13 COS o sonno 1 ora)','Statua con occhi laser (CD 15 DES, 4d6 radiosi)','Fossa con pali (CD 14 DES, caduta 3 m + 2d6 perforanti)','Lastra di pressione: porta si chiude (CD 18 FOR per riaprire)','Glifo di guardia esplosivo (CD 14 DES, 5d8 fuoco)','Ago avvelenato sulla maniglia (CD 11 COS o avvelenato)','Pavimento ghiacciato (CD 10 DES o prono)','Magia di teletrasporto a sorpresa','Roccia che precipita dal soffitto (CD 15 DES, 4d10)']
+const TESORO_STANZA = ['Niente di valore','Pochi spiccioli (2d6 mp, 1d4 ma)','Una gemma rotta (10 mo)','Vecchio scrigno chiuso (chiave persa)','Sacchetto di monete (3d10 mo)','Vecchio scudo dimenticato','Pergamena strappata con rune','Set di posate d\'argento (25 mo)','Statuetta dorata (50 mo)','Libro magico danneggiato','Fiala con liquido sconosciuto','Reliquia di un tempio (75 mo)']
+
+const QUARTIERI_CITTA = [
+  'Quartiere dei mercanti: bancarelle, grida di venditori, odore di spezie',
+  'Basso Fondo: vicoli bui, occhi nell\'ombra, odore di fogna',
+  'Quartiere nobile: palazzi alti, guardie in livrea, silenzi sospetti',
+  'Porto: marinai ubriachi, gabbiani, odore di pesce e catrame',
+  'Distretto dei Templi: incenso nell\'aria, canti sacri, mendicanti sui gradini',
+  'Quartiere degli Artigiani: martelli, forge, schemi e colori vivaci',
+  'Ghetto straniero: porte chiuse, sussurri, tensione palpabile',
+  'Piazza del Mercato: caos colorato, borseggiatori, artisti di strada',
+  'Quartiere universitario: studenti rumorosi, librerie polverose, magia leggera nell\'aria',
+  'Le Corti: tribunali, scribi, condanne pubbliche al gogna',
+  'Cimitero antico: tombe inclinate, edera, statue d\'angelo',
+  'Quartiere alchimisti: fumi colorati dalle fessure delle finestre',
+  'Catacombe sotto la città: passaggi dimenticati, lumini votivi',
+  'Quartiere malfamato: case di gioco, lupanari, locande senza nome',
+]
+
+const VOCI_TAVERNA = [
+  'Si dice che qualcuno abbia visto luci strane nella foresta a est.',
+  'Un mercante è scomparso portando con sé una grossa somma.',
+  'Il signore del castello non si vede da settimane.',
+  'Qualcuno ha rubato il sigillo reale dal palazzo.',
+  'Un pozzo nel villaggio vicino dà acqua nera.',
+  'Si vocifera di un tesoro nascosto sotto la vecchia torre.',
+  'Un predicatore straniero sta radunando seguaci in piazza.',
+  'Le guardie di frontiera non mandano più rapporti.',
+  'Qualcuno ha visto un drago volare di notte verso le montagne.',
+  'Una vecchia strega ha lanciato una maledizione sul raccolto.',
+  'Una statua del tempio ha pianto sangue all\'alba.',
+  'Il fiume ha cambiato corso da solo durante la notte.',
+  'Un bambino del villaggio è nato con gli occhi di drago.',
+  'Si racconta di una città di ghiaccio che appare nella foresta solo a luna piena.',
+  'I lupi delle colline non ululano più da una settimana.',
+  'Un cadavere è stato trovato in piazza con monete d\'oro al posto degli occhi.',
+  'Il vecchio mago della torre nera cerca apprendisti — nessuno torna.',
+  'Una nave fantasma è apparsa al porto, ferma e silente.',
+  'I morti del cimitero del vecchio campo di battaglia camminano di nuovo.',
+]
+
+const GANCI_CHI = ['Un vecchio mercante','Una bambina orfana','Il sindaco del villaggio','Un cavaliere ferito','Una messaggera reale','Un druido della foresta','Un ex-avventuriero','Un fantasma insoddisfatto','Un monaco in esilio','Un prigioniero fuggito','Un nobile in incognito','Un alchimista paranoico','Un cantastorie cieco','Una sacerdotessa in fuga','Uno gnomo molto agitato','Un goblin che parla la Lingua Comune']
+const GANCI_COSA = ['ha perso qualcosa di prezioso','offre una ricompensa ingente','ha bisogno di protezione','porta notizie di un pericolo imminente','cerca qualcuno scomparso','vuole vendetta','custodisce un segreto che scotta','ha bisogno di una scorta','ha trovato qualcosa di strano','chiede di indagare su una morte','vuole rubare qualcosa di sorvegliato','ha ricevuto una visione','sta per essere arrestato ingiustamente','vuole fuggire dalla città','cerca un erede perduto','ha aperto una porta che non doveva']
+const GANCI_DOVE = ['nelle fogne della città','in una torre abbandonata','nel bosco proibito','sulle rovine di un vecchio castello','al mercato nero','in un villaggio isolato','in un tempio dimenticato','nel porto malfamato','su una strada trafficata','in una miniera abbandonata','in un dungeon nanico','nel labirinto di siepi del nobile','nel cimitero degli stranieri','sotto il pavimento dell\'osteria','in una caverna sul mare','dentro un tumulo elfico']
+
+// ─── Generatori ──────────────────────────────────────────────────────────────
+function genNome(razza = 'umano') {
+  if (razza === 'elfo') return Math.random() > 0.5 ? pick(NOMI_ELFICI_M) : pick(NOMI_ELFICI_F)
+  if (razza === 'nano') return Math.random() > 0.5 ? pick(NOMI_NANI_M) : pick(NOMI_NANI_F)
+  if (razza === 'halfling') return `${pick(NOMI_HALFLING)} ${pick(COGNOMI)}`
+  if (razza === 'dragonide') return pick(NOMI_DRAGONIDI)
+  if (razza === 'nobile') return `${pick(TITOLI_NOBILE)} ${Math.random() > 0.5 ? pick(NOMI_M) : pick(NOMI_F)} di ${pick(COGNOMI)}`
+  const m = Math.random() > 0.5
+  return `${m ? pick(NOMI_M) : pick(NOMI_F)} ${pick(COGNOMI)}`
+}
+
+function genTaverna() { return `${pick(AGG_TAVERNA)} ${pick(NOMI_TAVERNA)}` }
+function genMeteo() { return pick(METEO) }
+
+function genPNG() {
+  const razze = ['umano','umano','umano','elfo','nano','halfling','umano','dragonide']
+  const razza = pick(razze)
+  return {
+    nome: genNome(razza),
+    razza,
+    occupazione: pick(OCCUPAZIONI),
+    carattere: pick(AGG_PNG),
+    tic: pick(TIC_NERVOSI),
+    motivazione: pick(MOTIVAZIONI_PNG),
+    segreto: pick(SEGRETI_PNG),
+  }
+}
+
+function genGancio() {
+  return { chi: pick(GANCI_CHI), cosa: pick(GANCI_COSA), dove: pick(GANCI_DOVE) }
+}
 
 function genStanza() {
   return {
     tipo: pick(TIPO_STANZA),
     caratteristica: pick(CARATTERISTICHE_STANZA),
     trappola: pick(TRAPPOLE_STANZA),
+    tesoro: pick(TESORO_STANZA),
     uscite: Math.floor(Math.random() * 3) + 1,
   }
 }
 
-const GANCI_CHI = ['Un vecchio mercante','Una bambina orfana','Il sindaco del villaggio','Un cavaliere ferito','Una messaggera reale','Un druido della foresta','Un ex-avventuriero','Un fantasma insoddisfatto','Un monaco in esilio','Un prigioniero fuggito']
-const GANCI_COSA = ['ha perso qualcosa di prezioso','offre una ricompensa ingente','ha bisogno di protezione','porta notizie di un pericolo imminente','cerca qualcuno scomparso','vuole vendetta','custodisce un segreto che scotta','ha bisogno di una scorta','ha trovato qualcosa di strano','chiede di indagare su una morte']
-const GANCI_DOVE = ['nelle fogne della città','in una torre abbandonata','nel bosco proibito','sulle rovine di un vecchio castello','al mercato nero','in un villaggio isolato','in un tempio dimenticato','nel porto malfamato','su una strada trafficata','in una miniera abbandonata']
-
-function genGancio() {
-  return { chi: pick(GANCI_CHI), cosa: pick(GANCI_COSA), dove: pick(GANCI_DOVE) }
-}
-
-const DESCRIZIONI_CITTÀ_QUARTIERE = ['Quartiere dei mercanti: bancarelle, grida di venditori, odore di spezie','Basso Fondo: vicoli bui, occhi nell\'ombra, odore di fogna','Quartiere nobile: palazzi alti, guardie in livrea, silenzi sospetti','Porto: marinai ubriachi, gabbiani, odore di pesce e catrame','Distretto dei Templi: incenso nell\'aria, canti sacri, mendicanti sui gradini','Quartiere degli Artigiani: martelli, forge, schemi e colori vivaci','Ghetto: porte chiuse, sussurri, tensione palpabile','Piazza del Mercato: caos colorato, borseggiatori, artisti di strada']
-const VOCI_TAVERNA = ['Si dice che qualcuno abbia visto luci strane nella foresta a est.','Un mercante è scomparso portando con sé una grossa somma.','Il signore del castello non si vede da settimane.','Qualcuno ha rubato il sigillo reale dal palazzo.','Un pozzo nel villaggio vicino dà acqua nera.','Si vocifera di un tesoro nascosto sotto la vecchia torre.','Un predicatore straniero sta radunando seguaci in piazza.','Le guardie di frontiera non mandano più rapporti.','Qualcuno ha visto un drago volare di notte verso le montagne.','Una vecchia strega ha lanciato una maledizione sul raccolto.']
-
-function genCittà() { return pick(DESCRIZIONI_CITTÀ_QUARTIERE) }
+function genCitta() { return pick(QUARTIERI_CITTA) }
 function genVoce() { return pick(VOCI_TAVERNA) }
 
-function pick(arr) { return arr[Math.floor(Math.random() * arr.length)] }
+// ─── Tesoro: pool ricco scalato per livello ─────────────────────────────────
+const TESORO_BANALE = [
+  'Pezzo di vetro colorato (1 mr)','Carta da gioco logora','Pettine d\'osso','Bottone di latta',
+  'Filo di lana grigia','Fiammifero magico (1 uso)','Pugno di sabbia speciale','Ditale d\'argento (1 mp)',
+]
+const TESORO_COMUNE = [
+  '10 mo in una borsa logora','Una pietra preziosa (50 mo)','Pozione di guarigione minore (2d4+2)',
+  'Pergamena con incantesimo di trucchetto','Mappa parziale di un dungeon','Chiave arrugginita senza serratura nota',
+  'Amuleto con simbolo sconosciuto (10 mo)','Libro cifrato','Gemma da 100 mo','Gioiello d\'argento (25 mo)',
+  'Moneta straniera da un regno lontano','Flacone di veleno base (3 dosi)','Specchio d\'argento tascabile (10 mo)',
+  'Pergamena di Protezione','Anello d\'argento con incisioni (15 mo)','Bracciale di rame (5 mo)','Polvere magica (3 dosi)',
+  'Cintura di studi (vantaggio Storia 1/giorno)','Candela eterna','Sacchetto di sale benedetto',
+]
+const TESORO_INSOLITO = [
+  'Spada +1 con rune elfiche','Mantello dell\'Elfo','Stivali di Velocità','Anello di Protezione +1','Bastone da mago primo livello',
+  'Armatura di Cuoio +1','Scudo +1','Occhiali del Tempo','Guanti dell\'Orchetto','Elmo della Telepatia (1/giorno)',
+  'Borsa di Contenimento','Pietra del Controllo Elementale','Ampolla d\'Eterna Acqua Pura','Spada Lunga Fiammeggiante',
+  'Manto del Nuotatore','Frecce +1 (10)','Liuto Bardico magico','Statuetta della Servigio','Cappello del Camuffamento',
+  'Anello di Caduta Felina','Lente di Lettura Magica','Pozione di Volo (1 ora)','Bacchetta di Detect Magic (7 cariche)',
+]
+const TESORO_RARO = [
+  'Spada Lunga +2','Armatura a Piastre +1','Anello di Protezione +2','Bastone della Strega (10 cariche)',
+  'Scarpe del Vento Veloce (×2 vel.)','Mantello del Pipistrello','Cintura della Forza del Gigante delle Colline',
+  'Elmo della Comprensione delle Lingue','Pozione di Forma Eterea','Pergamena di Palla di Fuoco',
+  'Anello di Resistenza al Fuoco','Bacchetta delle Saette (7 cariche)','Borsa Custodia (200 kg)',
+  'Pietra Ioun: Saggezza','Cintura della Forza del Gigante della Tempesta','Scudo +2','Frecce Slay (5)',
+]
+const TESORO_LEGGENDARIO = [
+  'Spada Vorpal','Armatura di Adamantio +3','Anello dei Tre Desideri (1d3 desideri rimasti)',
+  'Manto del Vampiro Lord','Bacchetta dell\'Orcus','Anello di Reggenza Elementale','Bastone del Magus Supremo',
+  'Calice di Bahamut','Spada del Mio Antenato (artefatto)','Corona del Re Lich (maledetta)',
+  'Pietra Filosofale (frammento)','Cuore di Pietra del Demone','Occhio di Vecna','Mano di Vecna',
+]
 
-function genNome(razza = 'umano') {
-  if (razza === 'elfo') {
-    return Math.random() > 0.5 ? pick(NOMI_ELFICI_M) : pick(NOMI_ELFICI_F)
-  }
-  if (razza === 'nano') {
-    return Math.random() > 0.5 ? pick(NOMI_NANI_M) : pick(NOMI_NANI_F)
-  }
-  const maschile = Math.random() > 0.5
-  return `${maschile ? pick(NOMI_MASCHILI) : pick(NOMI_FEMMINILI)} ${pick(COGNOMI)}`
-}
-
-function genTaverna() { return `${pick(AGGETTIVI_TAVERNA)} ${pick(NOMI_TAVERNA)}` }
-function genLocanda() { return `${pick(AGGETTIVI_LOCANDA)} ${pick(NOMI_LOCANDA)}` }
-function genMeteo() { return pick(METEO) }
-
-function genPNG() {
-  const razze = ['umano','umano','umano','elfo','nano','umano']
-  const razza = pick(razze)
-  return {
-    nome: genNome(razza),
-    razza,
-    occupazione: pick(OCCUPAZIONI_PNG),
-    carattere: pick(AGGETTIVI_PNG),
-    motivazione: pick(MOTIVAZIONI_PNG),
-    segreto: pick(SEGRETI_PNG),
-  }
-}
-
-const TESORI_COMUNI = ['10 mo in una borsa logora','Una pietra preziosa (50 mo)','Pozione di guarigione','Pergamena con incantesimo di 1° livello','Mappa parziale di un dungeon','Chiave arrugginita senza serratura nota','Amuleto con simbolo sconosciuto','Libro cifrato','Gemma da 100 mo','Gioiello d\'argento (25 mo)','Moneta straniera da un regno lontano','Flacone di veleno (3 dosi)','Specchio d\'argento tascabile','Pergamena di protezione']
-const TESORI_RARI = ['Spada +1 con rune elfiche','Mantello dell\'elfo','Stivali di velocità','Anello di protezione +1','Bastone da mago livello 1','Armatura di cuoio +1','Scudo +1','Occhiali del tempo','Guanti dell\'orchetto','Elmo della telepatia','Borse di contenimento','Pietra del controllo elementale','Veste di mago archimago','Corno di Valhalla d\'argento']
 function genTesoro(livello) {
-  const pool = livello < 5 ? TESORI_COMUNI : [...TESORI_COMUNI, ...TESORI_RARI]
-  const n = livello < 3 ? 2 : livello < 6 ? 3 : 4
-  const risultati = []
+  let pools, n, moltMo
+  if (livello <= 2) { pools = [TESORO_BANALE, TESORO_BANALE, TESORO_COMUNE]; n = 2; moltMo = 1 }
+  else if (livello <= 4) { pools = [TESORO_COMUNE, TESORO_COMUNE, TESORO_INSOLITO]; n = 3; moltMo = 3 }
+  else if (livello <= 7) { pools = [TESORO_COMUNE, TESORO_INSOLITO, TESORO_INSOLITO]; n = 3; moltMo = 8 }
+  else if (livello <= 10) { pools = [TESORO_INSOLITO, TESORO_INSOLITO, TESORO_RARO]; n = 4; moltMo = 20 }
+  else if (livello <= 14) { pools = [TESORO_INSOLITO, TESORO_RARO, TESORO_RARO]; n = 4; moltMo = 50 }
+  else if (livello <= 17) { pools = [TESORO_RARO, TESORO_RARO, TESORO_LEGGENDARIO]; n = 5; moltMo = 100 }
+  else { pools = [TESORO_RARO, TESORO_LEGGENDARIO, TESORO_LEGGENDARIO]; n = 5; moltMo = 200 }
+  const oggetti = []
   const used = new Set()
-  while (risultati.length < n) {
+  while (oggetti.length < n) {
+    const pool = pick(pools)
     const item = pick(pool)
-    if (!used.has(item)) { risultati.push(item); used.add(item) }
+    if (!used.has(item)) { oggetti.push(item); used.add(item) }
   }
-  const mo = Math.floor(Math.random() * (livello * 20)) + livello * 5
-  const mo_argento = Math.floor(Math.random() * (livello * 10))
-  return { oggetti: risultati, monete: `${mo} mo, ${mo_argento} ma` }
+  const mo = rollDice(2, 6) * moltMo
+  const mp = rollDice(1, 6) * moltMo * 5
+  const gemme = livello >= 5 ? `${rollDice(1, 4)} gemme da ${50 * Math.ceil(livello / 4)} mo` : null
+  return { oggetti, mo, mp, gemme, livello }
 }
 
-const INCONTRI = {
-  1: ['1d4 Goblin in agguato','2 Kobold che frugano nei rifiuti','1 Lupo affamato','1d6 Topi giganti in una cantina','1 Bandito solitario','1 Scheletro errante','1d4 Pipistrelli giganti','2 Serpenti velenosi','1 Ladro notturno','1 Cultista armato'],
-  3: ['1d6 Orchi in marcia','1 Ghoul alla ricerca di cibo','2d4 Goblin con un Worg','1 Ogre annoiato','1 Troll sotto un ponte','1d4 Zombi','1 Mago cultista con 2 scagnozzi','1 Ettercap con ragnatele','1d4 Gnoll','1 Vampiro minore'],
-  5: ['1 Mago rinnegato con 2 scagnozzi','1 Mannaro al chiaro di luna','1d4 Sahuagin emersi dal mare','1 Elementale dell\'aria','2 Troll','1 Medusa','1 Naga Ossea','1 Divoratore di Menti','1 Djinn corrotto','2 Elementali del fuoco'],
-  10: ['1 Drago giovane curioso','1 Vampiro con 3 servitori','1 Gigante della tempesta','2 Elementali del fuoco','1 Lich in viaggio','1d4 Guardiani di pietra','1 Aboleth','1 Golem di ferro','2 Giganti del fuoco','1 Balor imprigionato liberato'],
+// ─── Incontri casuali ────────────────────────────────────────────────────────
+// Costruiti dinamicamente attingendo a MONSTERS, suddivisi per range CR.
+function crToNum(cr) {
+  if (cr === '1/8') return 0.125
+  if (cr === '1/4') return 0.25
+  if (cr === '1/2') return 0.5
+  return parseInt(cr) || 0
 }
+
+const ENCOUNTER_TIERS = [
+  { range: [0, 0.5], partyLevels: [1] },
+  { range: [0.25, 1], partyLevels: [2] },
+  { range: [0.5, 2], partyLevels: [3] },
+  { range: [1, 3], partyLevels: [4] },
+  { range: [2, 4], partyLevels: [5, 6] },
+  { range: [3, 6], partyLevels: [7, 8] },
+  { range: [5, 9], partyLevels: [9, 10] },
+  { range: [7, 12], partyLevels: [11, 12] },
+  { range: [10, 15], partyLevels: [13, 14] },
+  { range: [12, 17], partyLevels: [15, 16] },
+  { range: [15, 20], partyLevels: [17, 18] },
+  { range: [18, 30], partyLevels: [19, 20] },
+]
+
+function getMonstersForLevel(livello) {
+  const tier = ENCOUNTER_TIERS.find(t => t.partyLevels.includes(livello)) || ENCOUNTER_TIERS[0]
+  const [lo, hi] = tier.range
+  return MONSTERS.filter(m => {
+    const cr = crToNum(m.cr)
+    return cr >= lo && cr <= hi
+  })
+}
+
 function genIncontro(livello) {
-  const tier = livello < 3 ? 1 : livello < 6 ? 3 : livello < 11 ? 5 : 10
-  return pick(INCONTRI[tier])
+  const pool = getMonstersForLevel(livello)
+  if (!pool.length) return { gruppo: [] }
+  const isHorde = Math.random() < 0.5
+  if (isHorde) {
+    const m = pick(pool)
+    const count = Math.max(1, Math.min(8, Math.floor(rollDice(1, 4) + livello / 4)))
+    return { gruppo: [{ monster: m, count }] }
+  }
+  const variants = pickN(pool, Math.min(2, pool.length))
+  return {
+    gruppo: variants.map(m => ({ monster: m, count: rollDice(1, 3) }))
+  }
 }
 
-function GeneratoriTab() {
+// ─── Modal universale per item D&D (mostro/incantesimo/oggetto) ────────────
+function ItemDetailModal({ item, onClose }) {
+  const [aiData, setAiData] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!item || item.kind !== 'item') return
+    setAiData(null)
+    setLoading(true)
+    lookupWithGroqFallback(item.name, 'equipment')
+      .then(res => setAiData(res))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [item?.name, item?.kind])
+
+  if (!item) return null
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal fade-in" onClick={e => e.stopPropagation()} style={{ maxWidth: 540, maxHeight: '85vh', overflow: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
+          <h2 style={{ margin: 0, color: '#f1f5f9', fontSize: '1.15rem' }}>{item.name}</h2>
+          <button className="btn-icon" onClick={onClose}><X size={18} /></button>
+        </div>
+
+        {item.kind === 'monster' && <MonsterDetail m={item.monster} />}
+        {item.kind === 'spell' && <SpellDetail s={item.spell} />}
+        {item.kind === 'item' && (
+          loading
+            ? <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#64748b', fontSize: '0.85rem' }}>
+                <Loader size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> Ricerca nel manuale…
+              </div>
+            : aiData
+              ? (<>
+                  {aiData.source === 'ai' && <span style={{ background: '#082f49', color: '#38bdf8', border: '1px solid #0369a1', borderRadius: 6, padding: '2px 8px', fontSize: '0.65rem', fontWeight: 600, display: 'inline-block', marginBottom: 8 }}>✦ AI</span>}
+                  <p style={{ color: '#cbd5e1', fontSize: '0.85rem', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>{aiData.data.description}</p>
+                </>)
+              : <p style={{ color: '#475569', fontStyle: 'italic' }}>Nessuna descrizione trovata.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MonsterDetail({ m }) {
+  return (
+    <>
+      <p style={{ margin: '0 0 0.75rem', color: '#94a3b8', fontSize: '0.8rem' }}>{m.size} {m.type} • CA {m.ac} • {m.hp} PF • Velocità {m.speed} • CR {m.cr}</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 6, marginBottom: '1rem', background: '#111420', borderRadius: 8, padding: '0.5rem' }}>
+        {['FOR','DES','COS','INT','SAG','CAR'].map((label, i) => {
+          const val = [m.str, m.dex, m.con, m.int, m.wis, m.cha][i]
+          return (
+            <div key={label} style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: '0.6rem', color: '#64748b', fontWeight: 700 }}>{label}</div>
+              <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#a78bfa' }}>{val}</div>
+              <div style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{mod(val)}</div>
+            </div>
+          )
+        })}
+      </div>
+      {m.saves?.length > 0 && (
+        <p style={{ margin: '0 0 0.5rem', fontSize: '0.78rem', color: '#cbd5e1' }}><strong style={{ color: '#94a3b8' }}>Salvezze:</strong> {m.saves.join(', ')}</p>
+      )}
+      {m.skills?.length > 0 && (
+        <p style={{ margin: '0 0 0.75rem', fontSize: '0.78rem', color: '#cbd5e1' }}><strong style={{ color: '#94a3b8' }}>Abilità:</strong> {m.skills.join(', ')}</p>
+      )}
+      {m.traits?.length > 0 && (
+        <div style={{ marginBottom: '0.75rem' }}>
+          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', marginBottom: 4 }}>Tratti</div>
+          {m.traits.map((t, i) => typeof t === 'string'
+            ? <p key={i} style={{ margin: '0 0 4px', fontSize: '0.8rem', color: '#cbd5e1' }}>• {t}</p>
+            : <p key={i} style={{ margin: '0 0 4px', fontSize: '0.8rem', color: '#cbd5e1' }}><strong>{t.name}.</strong> {t.desc}</p>
+          )}
+        </div>
+      )}
+      {m.actions?.length > 0 && (
+        <div style={{ marginBottom: '0.5rem' }}>
+          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', marginBottom: 4 }}>Azioni</div>
+          {m.actions.map((a, i) => (
+            <p key={i} style={{ margin: '0 0 4px', fontSize: '0.8rem', color: '#cbd5e1' }}><strong>{a.name}.</strong> {a.desc}</p>
+          ))}
+        </div>
+      )}
+      {m.reactions?.length > 0 && (
+        <div>
+          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', marginBottom: 4 }}>Reazioni</div>
+          {m.reactions.map((r, i) => (
+            <p key={i} style={{ margin: '0 0 4px', fontSize: '0.8rem', color: '#cbd5e1' }}><strong>{r.name}.</strong> {r.desc}</p>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+function SpellDetail({ s }) {
+  return (
+    <>
+      {s.scuola && <p style={{ margin: '0 0 0.75rem', color: '#a78bfa', fontSize: '0.8rem', fontStyle: 'italic' }}>{s.scuola}</p>}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: '0.75rem' }}>
+        {[['Lancio', s.tempo], ['Gittata', s.gittata], ['Durata', s.durata], ['Componenti', s.componenti]].filter(x => x[1]).map(([l, v]) => (
+          <div key={l} style={{ background: '#0d0f18', border: '1px solid #1e2235', borderRadius: 6, padding: '4px 8px' }}>
+            <div style={{ fontSize: '0.58rem', color: '#64748b', textTransform: 'uppercase' }}>{l}</div>
+            <div style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>{v}</div>
+          </div>
+        ))}
+      </div>
+      <p style={{ color: '#cbd5e1', fontSize: '0.85rem', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap' }}>
+        {s.description || s.desc || 'Descrizione non disponibile.'}
+      </p>
+    </>
+  )
+}
+
+// ─── Inline Clickable Item ──────────────────────────────────────────────────
+// Trasforma un nome in chip cliccabile cercando match in mostri/incantesimi/oggetti.
+function ClickableName({ text, onSelect }) {
+  if (!text || typeof text !== 'string') return text
+  const monster = MONSTERS.find(m => text.toLowerCase().includes(m.name.toLowerCase()))
+  const spell = monster ? null : lookupSpell(text)
+  if (monster) {
+    return <button className="dm-chip dm-chip-monster" onClick={() => onSelect({ name: monster.name, kind: 'monster', monster })}>{text}</button>
+  }
+  if (spell) {
+    return <button className="dm-chip dm-chip-spell" onClick={() => onSelect({ name: spell.name, kind: 'spell', spell })}>{text}</button>
+  }
+  // fallback: oggetto / generico
+  return <button className="dm-chip dm-chip-item" onClick={() => onSelect({ name: text, kind: 'item' })}>{text}</button>
+}
+
+// ─── Generatori Tab ──────────────────────────────────────────────────────────
+function GeneratoriTab({ onSelect }) {
   const [livello, setLivello] = useState(1)
   const [results, setResults] = useState({})
 
@@ -114,41 +379,39 @@ function GeneratoriTab() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {/* Livello party */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Livello party:</span>
-        <input type="number" min={1} max={20} value={livello} onChange={e => setLivello(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
+        <input type="number" min={1} max={20} value={livello}
+          onChange={e => setLivello(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
           className="input" style={{ width: 60 }} />
+        <span style={{ color: '#475569', fontSize: '0.75rem' }}>(usato per Tesoro e Incontro)</span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1rem' }}>
-        {/* PNG completo */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
         <GenCard title="PNG Completo" icon="🎭" onGen={() => gen('png', genPNG)}
           result={results.png ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div><strong>Nome:</strong> {results.png.nome} ({results.png.razza})</div>
+              <div><strong>Nome:</strong> {results.png.nome} <span style={{ color: '#64748b' }}>({results.png.razza})</span></div>
               <div><strong>Occupazione:</strong> {results.png.occupazione}</div>
               <div><strong>Carattere:</strong> {results.png.carattere}</div>
+              <div><strong>Tic:</strong> {results.png.tic}</div>
               <div><strong>Motivazione:</strong> {results.png.motivazione}</div>
-              <div><strong>Segreto:</strong> {results.png.segreto}</div>
+              <div><strong>Segreto:</strong> <span style={{ color: '#fbbf24' }}>{results.png.segreto}</span></div>
             </div>
           ) : null}
         />
-        {/* Nome umano */}
         <GenCard title="Nome Umano" icon="👤" onGen={() => gen('nome', () => genNome('umano'))} result={results.nome} />
-        {/* Nome elfico */}
         <GenCard title="Nome Elfico" icon="🌿" onGen={() => gen('nomeElfo', () => genNome('elfo'))} result={results.nomeElfo} />
-        {/* Nome nanico */}
         <GenCard title="Nome Nanico" icon="⛏️" onGen={() => gen('nomeNano', () => genNome('nano'))} result={results.nomeNano} />
-        {/* Taverna */}
+        <GenCard title="Nome Halfling" icon="🍄" onGen={() => gen('nomeH', () => genNome('halfling'))} result={results.nomeH} />
+        <GenCard title="Nome Dragonide" icon="🐉" onGen={() => gen('nomeD', () => genNome('dragonide'))} result={results.nomeD} />
+        <GenCard title="Nome Nobiliare" icon="👑" onGen={() => gen('nomeN', () => genNome('nobile'))} result={results.nomeN} />
+
         <GenCard title="Nome Taverna" icon="🍺" onGen={() => gen('taverna', genTaverna)} result={results.taverna} />
-        {/* Locanda */}
-        <GenCard title="Nome Locanda" icon="🏠" onGen={() => gen('locanda', genLocanda)} result={results.locanda} />
-        {/* Meteo */}
         <GenCard title="Meteo" icon="☁️" onGen={() => gen('meteo', genMeteo)} result={results.meteo} />
-        {/* Voce di taverna */}
         <GenCard title="Voce di Taverna" icon="🗣️" onGen={() => gen('voce', genVoce)} result={results.voce} />
-        {/* Gancio avventura */}
+        <GenCard title="Quartiere Città" icon="🏙️" onGen={() => gen('citta', genCitta)} result={results.citta} />
+
         <GenCard title="Gancio Avventura" icon="🪝" onGen={() => gen('gancio', genGancio)}
           result={results.gancio ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -158,30 +421,49 @@ function GeneratoriTab() {
             </div>
           ) : null}
         />
-        {/* Stanza dungeon */}
+
         <GenCard title="Stanza Dungeon" icon="🏚️" onGen={() => gen('stanza', genStanza)}
           result={results.stanza ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <div><strong>Tipo:</strong> {results.stanza.tipo}</div>
               <div><strong>Dettaglio:</strong> {results.stanza.caratteristica}</div>
               <div><strong>Trappola:</strong> {results.stanza.trappola}</div>
+              <div><strong>Tesoro:</strong> {results.stanza.tesoro}</div>
               <div><strong>Uscite:</strong> {results.stanza.uscite}</div>
             </div>
           ) : null}
         />
-        {/* Quartiere città */}
-        <GenCard title="Quartiere Città" icon="🏙️" onGen={() => gen('citta', genCittà)} result={results.citta} />
-        {/* Tesoro */}
+
         <GenCard title={`Tesoro (Liv. ${livello})`} icon="💎" onGen={() => gen('tesoro', () => genTesoro(livello))}
           result={results.tesoro ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div><strong>Monete:</strong> {results.tesoro.monete}</div>
-              {results.tesoro.oggetti.map((o, i) => <div key={i}>• {o}</div>)}
+              <div style={{ fontSize: '0.8rem' }}>
+                <strong>Monete:</strong>{' '}
+                <span style={{ color: '#f59e0b' }}>{results.tesoro.mo} mo</span>,{' '}
+                <span style={{ color: '#cbd5e1' }}>{results.tesoro.mp} mp</span>
+                {results.tesoro.gemme && <>, <span style={{ color: '#a78bfa' }}>{results.tesoro.gemme}</span></>}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 4 }}>
+                {results.tesoro.oggetti.map((o, i) => (
+                  <div key={i} style={{ fontSize: '0.78rem' }}>◆ <ClickableName text={o} onSelect={onSelect} /></div>
+                ))}
+              </div>
             </div>
           ) : null}
         />
-        {/* Incontro */}
-        <GenCard title={`Incontro Casuale (Liv. ${livello})`} icon="⚔️" onGen={() => gen('incontro', () => genIncontro(livello))} result={results.incontro} />
+
+        <GenCard title={`Incontro (Liv. ${livello})`} icon="⚔️" onGen={() => gen('incontro', () => genIncontro(livello))}
+          result={results.incontro?.gruppo?.length ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {results.incontro.gruppo.map((g, i) => (
+                <div key={i} style={{ fontSize: '0.85rem' }}>
+                  {g.count}× <ClickableName text={g.monster.name} onSelect={onSelect} />{' '}
+                  <span style={{ color: '#64748b', fontSize: '0.7rem' }}>(CR {g.monster.cr})</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        />
       </div>
     </div>
   )
@@ -200,11 +482,9 @@ function GenCard({ title, icon, onGen, result }) {
         </button>
       </div>
       {result ? (
-        typeof result === 'string' ? (
-          <div style={{ color: '#a78bfa', fontSize: '0.875rem', fontWeight: 500 }}>{result}</div>
-        ) : (
-          <div style={{ color: '#cbd5e1', fontSize: '0.8rem', lineHeight: 1.6 }}>{result}</div>
-        )
+        typeof result === 'string'
+          ? <div style={{ color: '#a78bfa', fontSize: '0.875rem', fontWeight: 500 }}>{result}</div>
+          : <div style={{ color: '#cbd5e1', fontSize: '0.8rem', lineHeight: 1.6 }}>{result}</div>
       ) : (
         <div style={{ color: '#475569', fontSize: '0.8rem', fontStyle: 'italic' }}>Premi il pulsante per generare…</div>
       )}
@@ -212,87 +492,28 @@ function GenCard({ title, icon, onGen, result }) {
   )
 }
 
-// ─── Monsters ───────────────────────────────────────────────────────────────
-
+// ─── Mostri Tab ──────────────────────────────────────────────────────────────
 const CR_ORDER = ['0', '1/8', '1/4', '1/2', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '26', '27', '28', '29', '30']
 function crSort(a, b) { return CR_ORDER.indexOf(String(a.cr)) - CR_ORDER.indexOf(String(b.cr)) }
 
-function mod(v) { const m = Math.floor((v - 10) / 2); return (m >= 0 ? '+' : '') + m }
-
-function MonsterStatBlock({ m, onClose }) {
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }} onClick={onClose}>
-      <div style={{ background: '#1a1d2e', border: '1px solid #252840', borderRadius: 12, padding: '1.5rem', maxWidth: 520, width: '100%', maxHeight: '85vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-          <div>
-            <h2 style={{ margin: 0, color: '#f1f5f9', fontSize: '1.2rem' }}>{m.name}</h2>
-            <p style={{ margin: '4px 0 0', color: '#94a3b8', fontSize: '0.8rem' }}>{m.size} {m.type} • CA {m.ac} • {m.hp} PF • Velocità {m.speed}</p>
-          </div>
-          <button className="btn btn-secondary btn-sm" onClick={onClose}>✕</button>
-        </div>
-
-        {/* Stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,1fr)', gap: 6, marginBottom: '1rem', background: '#111420', borderRadius: 8, padding: '0.75rem' }}>
-          {['FOR','DES','COS','INT','SAG','CAR'].map((label, i) => {
-            const val = [m.str, m.dex, m.con, m.int, m.wis, m.cha][i]
-            return (
-              <div key={label} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: '0.65rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>{label}</div>
-                <div style={{ fontSize: '1rem', fontWeight: 700, color: '#a78bfa' }}>{val}</div>
-                <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{mod(val)}</div>
-              </div>
-            )
-          })}
-        </div>
-
-        {m.saves?.length > 0 && (
-          <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', color: '#cbd5e1' }}><strong style={{ color: '#94a3b8' }}>Tiri salvezza:</strong> {m.saves.join(', ')}</p>
-        )}
-
-        {m.traits?.length > 0 && (
-          <div style={{ marginBottom: '0.75rem' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Tratti</div>
-            {m.traits.map((t, i) => (
-              <p key={i} style={{ margin: '0 0 6px', fontSize: '0.82rem', color: '#cbd5e1' }}><strong>{t.name}.</strong> {t.desc}</p>
-            ))}
-          </div>
-        )}
-
-        {m.actions?.length > 0 && (
-          <div style={{ marginBottom: '0.75rem' }}>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Azioni</div>
-            {m.actions.map((a, i) => (
-              <p key={i} style={{ margin: '0 0 6px', fontSize: '0.82rem', color: '#cbd5e1' }}><strong>{a.name}.</strong> {a.desc}</p>
-            ))}
-          </div>
-        )}
-
-        {m.reactions?.length > 0 && (
-          <div>
-            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>Reazioni</div>
-            {m.reactions.map((r, i) => (
-              <p key={i} style={{ margin: '0 0 6px', fontSize: '0.82rem', color: '#cbd5e1' }}><strong>{r.name}.</strong> {r.desc}</p>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function MostriTab() {
+function MostriTab({ onSelect }) {
   const [search, setSearch] = useState('')
   const [crFilter, setCrFilter] = useState('all')
-  const [selected, setSelected] = useState(null)
+  const [typeFilter, setTypeFilter] = useState('all')
 
   const monsters = useMemo(() => {
     let list = [...MONSTERS].sort(crSort)
-    if (search) list = list.filter(m => m.name.toLowerCase().includes(search.toLowerCase()) || m.type.toLowerCase().includes(search.toLowerCase()))
+    if (search) {
+      const s = search.toLowerCase()
+      list = list.filter(m => m.name.toLowerCase().includes(s) || (m.type || '').toLowerCase().includes(s))
+    }
     if (crFilter !== 'all') list = list.filter(m => String(m.cr) === crFilter)
+    if (typeFilter !== 'all') list = list.filter(m => (m.type || '').toLowerCase().includes(typeFilter.toLowerCase()))
     return list
-  }, [search, crFilter])
+  }, [search, crFilter, typeFilter])
 
   const crs = useMemo(() => [...new Set(MONSTERS.map(m => String(m.cr)))].sort((a, b) => CR_ORDER.indexOf(a) - CR_ORDER.indexOf(b)), [])
+  const types = useMemo(() => [...new Set(MONSTERS.map(m => (m.type || '').split(' ')[0]).filter(Boolean))].sort(), [])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -301,15 +522,21 @@ function MostriTab() {
           <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
           <input className="input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca mostro…" style={{ paddingLeft: 32, width: '100%' }} />
         </div>
-        <select className="select" value={crFilter} onChange={e => setCrFilter(e.target.value)} style={{ width: 100 }}>
+        <select className="select" value={crFilter} onChange={e => setCrFilter(e.target.value)} style={{ width: 110 }}>
           <option value="all">Tutti i CR</option>
           {crs.map(cr => <option key={cr} value={cr}>CR {cr}</option>)}
         </select>
+        <select className="select" value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={{ width: 130 }}>
+          <option value="all">Tutti i tipi</option>
+          {types.map(t => <option key={t} value={t}>{t}</option>)}
+        </select>
       </div>
+
+      <div style={{ fontSize: '0.75rem', color: '#475569' }}>{monsters.length} mostri</div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
         {monsters.map((m, i) => (
-          <button key={i} onClick={() => setSelected(m)} style={{
+          <button key={`${m.name}-${m.cr}-${i}`} onClick={() => onSelect({ name: m.name, kind: 'monster', monster: m })} style={{
             background: '#1a1d2e', border: '1px solid #252840', borderRadius: 8,
             padding: '0.75rem', textAlign: 'left', cursor: 'pointer',
             transition: 'border-color 0.15s',
@@ -324,51 +551,66 @@ function MostriTab() {
         ))}
         {monsters.length === 0 && <p style={{ color: '#475569', fontStyle: 'italic', gridColumn: '1/-1' }}>Nessun mostro trovato.</p>}
       </div>
-
-      {selected && <MonsterStatBlock m={selected} onClose={() => setSelected(null)} />}
     </div>
   )
 }
 
-// ─── Spells ─────────────────────────────────────────────────────────────────
-
-// scuola field format: "Abiurazione di 2° livello" or "Trucchetto di Abiurazione"
+// ─── Magie Tab ───────────────────────────────────────────────────────────────
 function parseSpellLevel(scuola) {
-  if (!scuola) return null
+  if (!scuola || typeof scuola !== 'string') return null
   if (/^trucchetto/i.test(scuola)) return 0
-  const m = scuola.match(/di\s+(\d+)°/)
+  const m = scuola.match(/(\d+)°/)
   return m ? parseInt(m[1]) : null
 }
 
 function parseSpellSchool(scuola) {
-  if (!scuola) return ''
-  if (/^trucchetto/i.test(scuola)) {
-    const after = scuola.replace(/^trucchetto\s+di\s+/i, '')
-    return after.charAt(0).toUpperCase() + after.slice(1).toLowerCase()
-  }
-  const school = scuola.split(' di ')[0]
-  return school.charAt(0).toUpperCase() + school.slice(1)
+  if (!scuola || typeof scuola !== 'string') return ''
+  const trk = scuola.match(/^trucchetto\s+di\s+(\w+)/i)
+  if (trk) return trk[1].charAt(0).toUpperCase() + trk[1].slice(1).toLowerCase()
+  const school = scuola.split(/\s+di\s+/i)[0]
+  return school.charAt(0).toUpperCase() + school.slice(1).toLowerCase()
 }
 
-function MagieTab() {
+function MagieTab({ onSelect }) {
   const allSpells = useMemo(() => getAllSpells(), [])
   const [search, setSearch] = useState('')
   const [levelFilter, setLevelFilter] = useState('all')
   const [schoolFilter, setSchoolFilter] = useState('all')
-  const [expanded, setExpanded] = useState(null)
+
+  // Pre-calcolo livello/scuola per evitare il ricalcolo ad ogni keystroke.
+  const enriched = useMemo(() =>
+    allSpells.map(s => ({ ...s, _level: parseSpellLevel(s.scuola), _school: parseSpellSchool(s.scuola) }))
+      .sort((a, b) => {
+        if (a._level !== b._level) return (a._level ?? 99) - (b._level ?? 99)
+        return (a.name || '').localeCompare(b.name || '')
+      })
+  , [allSpells])
 
   const schools = useMemo(() => {
-    const set = new Set(allSpells.map(s => parseSpellSchool(s.scuola)).filter(Boolean))
+    const set = new Set(enriched.map(s => s._school).filter(Boolean))
     return [...set].sort()
-  }, [allSpells])
+  }, [enriched])
 
   const filtered = useMemo(() => {
-    let list = allSpells
-    if (search) list = list.filter(s => (s.name || '').toLowerCase().includes(search.toLowerCase()))
-    if (levelFilter !== 'all') list = list.filter(s => parseSpellLevel(s.scuola) === parseInt(levelFilter))
-    if (schoolFilter !== 'all') list = list.filter(s => parseSpellSchool(s.scuola) === schoolFilter)
+    let list = enriched
+    if (search) {
+      const q = search.toLowerCase()
+      list = list.filter(s => (s.name || '').toLowerCase().includes(q))
+    }
+    if (levelFilter !== 'all') {
+      const lv = parseInt(levelFilter)
+      list = list.filter(s => s._level === lv)
+    }
+    if (schoolFilter !== 'all') list = list.filter(s => s._school === schoolFilter)
     return list
-  }, [allSpells, search, levelFilter, schoolFilter])
+  }, [enriched, search, levelFilter, schoolFilter])
+
+  // Conteggi per livello (per badge informativi)
+  const counts = useMemo(() => {
+    const c = {}
+    enriched.forEach(s => { c[s._level ?? 'x'] = (c[s._level ?? 'x'] || 0) + 1 })
+    return c
+  }, [enriched])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -377,134 +619,238 @@ function MagieTab() {
           <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
           <input className="input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca incantesimo…" style={{ paddingLeft: 32, width: '100%' }} />
         </div>
-        <select className="select" value={levelFilter} onChange={e => setLevelFilter(e.target.value)} style={{ width: 120 }}>
+        <select className="select" value={levelFilter} onChange={e => setLevelFilter(e.target.value)} style={{ width: 150 }}>
           <option value="all">Tutti i livelli</option>
-          <option value="0">Trucchetto</option>
-          {[1,2,3,4,5,6,7,8,9].map(l => <option key={l} value={String(l)}>Livello {l}</option>)}
+          <option value="0">Trucchetti ({counts[0] || 0})</option>
+          {[1,2,3,4,5,6,7,8,9].map(l => <option key={l} value={String(l)}>Livello {l} ({counts[l] || 0})</option>)}
         </select>
-        <select className="select" value={schoolFilter} onChange={e => setSchoolFilter(e.target.value)} style={{ width: 140 }}>
+        <select className="select" value={schoolFilter} onChange={e => setSchoolFilter(e.target.value)} style={{ width: 150 }}>
           <option value="all">Tutte le scuole</option>
           {schools.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
       </div>
 
-      <div style={{ fontSize: '0.75rem', color: '#475569' }}>{filtered.length} incantesimi</div>
+      <div style={{ fontSize: '0.75rem', color: '#475569' }}>
+        {filtered.length} incantesimi {filtered.length !== enriched.length && <span>(su {enriched.length} totali)</span>}
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {filtered.map((spell, i) => {
-          const key = spell.name || spell.nome || i
-          const isOpen = expanded === key
-          const level = parseSpellLevel(spell.scuola)
-          const school = parseSpellSchool(spell.scuola)
-          return (
-            <div key={key} style={{ background: '#1a1d2e', border: `1px solid ${isOpen ? '#3730a3' : '#252840'}`, borderRadius: 8, overflow: 'hidden' }}>
-              <button
-                onClick={() => setExpanded(isOpen ? null : key)}
-                style={{ width: '100%', background: 'none', border: 'none', padding: '0.75rem 1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-                  <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: level === 0 ? '#1e3a5f' : '#1e1040', color: level === 0 ? '#38bdf8' : '#a78bfa', whiteSpace: 'nowrap', flexShrink: 0 }}>
-                    {level === 0 ? 'Trk' : level !== null ? `Liv ${level}` : '?'}
-                  </span>
-                  <span style={{ color: '#f1f5f9', fontWeight: 600, fontSize: '0.875rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spell.name || spell.nome}</span>
-                  {school && <span style={{ fontSize: '0.7rem', color: '#64748b', whiteSpace: 'nowrap', flexShrink: 0 }}>{school}</span>}
-                </div>
-                {isOpen ? <ChevronUp size={14} color="#64748b" /> : <ChevronDown size={14} color="#64748b" />}
-              </button>
-              {isOpen && (
-                <div style={{ padding: '0 1rem 1rem', borderTop: '1px solid #252840' }}>
-                  <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginTop: '0.75rem', marginBottom: '0.75rem' }}>
-                    {spell.tempo && <Stat label="Lancio" value={spell.tempo} />}
-                    {spell.gittata && <Stat label="Gittata" value={spell.gittata} />}
-                    {spell.durata && <Stat label="Durata" value={spell.durata} />}
-                    {spell.componenti && <Stat label="Componenti" value={spell.componenti} />}
-                  </div>
-                  {(spell.description || spell.descrizione) && (
-                    <p style={{ margin: 0, color: '#cbd5e1', fontSize: '0.82rem', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
-                      {spell.description || spell.descrizione}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          )
-        })}
+        {filtered.map((spell, i) => (
+          <button key={spell.name + i}
+            onClick={() => onSelect({ name: spell.name, kind: 'spell', spell })}
+            style={{
+              background: '#1a1d2e', border: '1px solid #252840', borderRadius: 8,
+              padding: '0.6rem 1rem', cursor: 'pointer', display: 'flex',
+              alignItems: 'center', gap: 10, textAlign: 'left',
+            }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = '#7c3aed'}
+            onMouseLeave={e => e.currentTarget.style.borderColor = '#252840'}
+          >
+            <span style={{
+              fontSize: '0.65rem', fontWeight: 700, padding: '2px 7px', borderRadius: 999,
+              background: spell._level === 0 ? '#1e3a5f' : '#1e1040',
+              color: spell._level === 0 ? '#38bdf8' : '#a78bfa',
+              whiteSpace: 'nowrap', flexShrink: 0,
+            }}>
+              {spell._level === 0 ? 'Trk' : spell._level !== null ? `L${spell._level}` : '?'}
+            </span>
+            <span style={{ color: '#f1f5f9', fontWeight: 600, fontSize: '0.875rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{spell.name}</span>
+            {spell._school && <span style={{ fontSize: '0.7rem', color: '#64748b', whiteSpace: 'nowrap', flexShrink: 0 }}>{spell._school}</span>}
+            <Info size={12} color="#475569" />
+          </button>
+        ))}
         {filtered.length === 0 && <p style={{ color: '#475569', fontStyle: 'italic' }}>Nessun incantesimo trovato.</p>}
       </div>
     </div>
   )
 }
 
-function Stat({ label, value }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-      <span style={{ fontSize: '0.6rem', color: '#64748b', textTransform: 'uppercase', fontWeight: 700 }}>{label}</span>
-      <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{value}</span>
-    </div>
-  )
-}
-
-// ─── Tables ──────────────────────────────────────────────────────────────────
-
+// ─── Tabelle Tab (espanso) ───────────────────────────────────────────────────
 const TABLES = [
   {
-    title: 'Magia Selvaggia', icon: '✨',
+    title: 'Magia Selvaggia (d20)', icon: '✨',
     rows: [
-      '1. Il personaggio lancia Fuochi d\'artificio per 1 minuto.',
-      '2. Il personaggio si teletrasporta in uno spazio casuale entro 18 m.',
-      '3. Il personaggio è circondato da petali di fiori per 1 minuto.',
-      '4. Il personaggio trasforma un oggetto che tocca in cristallo.',
-      '5. Il personaggio guadagna 3d6 PF temporanei.',
-      '6. Tutti i personaggi entro 9 m si scambiano i PF attuali.',
-      '7. Il personaggio è invisibile fino alla sua prossima mossa.',
-      '8. Il personaggio lancia Palla di fuoco centrata su sé stesso.',
-      '9. Il personaggio inizia a levitare per 1 minuto.',
-      '10. 1d4 pecore appaiono a 9 m dal personaggio.',
+      'Il personaggio lancia Fuochi d\'artificio per 1 minuto.',
+      'Il personaggio si teletrasporta in uno spazio casuale entro 18 m.',
+      'Il personaggio è circondato da petali di fiori per 1 minuto.',
+      'Il personaggio trasforma un oggetto che tocca in cristallo.',
+      'Il personaggio guadagna 3d6 PF temporanei.',
+      'Tutti i personaggi entro 9 m si scambiano i PF attuali.',
+      'Il personaggio è invisibile fino alla sua prossima mossa.',
+      'Il personaggio lancia Palla di Fuoco centrata su sé stesso.',
+      'Il personaggio inizia a levitare per 1 minuto.',
+      '1d4 pecore appaiono a 9 m dal personaggio.',
+      'Il personaggio diventa un albero per 1 minuto (può ancora pensare).',
+      'Tutti gli alleati entro 9 m guariscono di 1d10 PF.',
+      'L\'aspetto fisico del personaggio cambia (capelli, occhi).',
+      'Una creatura ostile entro 36 m subisce confusione per 1 round.',
+      'Tutti gli oggetti non viventi entro 1,5 m ricevono Animare Oggetti.',
+      'Inversione di gravità per 10 secondi attorno al personaggio.',
+      'Il personaggio dimentica un incantesimo casuale fino al prossimo riposo.',
+      'Il prossimo incantesimo del personaggio è automaticamente potenziato.',
+      'Il personaggio si moltiplica in 2 immagini speculari per 1 minuto.',
+      'Tira di nuovo due volte e applica entrambi gli effetti.',
     ]
   },
   {
-    title: 'Tratti PNG Casuali', icon: '🎭',
+    title: 'Tratti PNG Casuali (d20)', icon: '🎭',
     rows: [
-      '1. Parla sempre in terza persona.',
-      '2. Colleziona oggetti banali trovati per strada.',
-      '3. Ha un tic nervoso quando mente.',
-      '4. Cita sempre un saggio immaginario.',
-      '5. Non riesce a guardarsi negli occhi.',
-      '6. Canta sottovoce quando è nervoso.',
-      '7. Porta sempre con sé cibo da condividere.',
-      '8. Chiama tutti con soprannomi inventati sul momento.',
-      '9. Teme i gatti sopra ogni altra cosa.',
-      '10. Racconta barzellette inappropriato nei momenti sbagliati.',
+      'Parla sempre in terza persona.',
+      'Colleziona oggetti banali trovati per strada.',
+      'Ha un tic nervoso quando mente.',
+      'Cita sempre un saggio immaginario.',
+      'Non riesce a guardarsi negli occhi.',
+      'Canta sottovoce quando è nervoso.',
+      'Porta sempre con sé cibo da condividere.',
+      'Chiama tutti con soprannomi inventati sul momento.',
+      'Teme i gatti sopra ogni altra cosa.',
+      'Racconta barzellette inappropriate nei momenti sbagliati.',
+      'Ha una passione segreta per la poesia romantica.',
+      'Tiene un diario in una lingua morta.',
+      'Si rivolge agli oggetti come se fossero persone.',
+      'Crede che il numero 7 porti sfortuna.',
+      'Ha sempre con sé un dado truccato.',
+      'Non beve acqua, solo vino o latte.',
+      'Mente compulsivamente su dettagli minori.',
+      'Si presenta sempre con un nome diverso.',
+      'Ha un\'opinione fortissima su cibo e cucina.',
+      'Ride alle cose tristi e piange a quelle felici.',
     ]
   },
   {
-    title: 'Conseguenze di Fallimento Critico', icon: '💀',
+    title: 'Conseguenze Fallimento Critico (d12)', icon: '💀',
     rows: [
-      '1. L\'arma cade a terra a 1,5 m.',
-      '2. L\'attacco colpisce un alleato adiacente.',
-      '3. Il personaggio inciampa e cade prono.',
-      '4. La corda si rompe o l\'arma si inceppa.',
-      '5. L\'armatura subisce un ammaccatura (-1 CA fino a riparazione).',
-      '6. Il personaggio è stordito fino all\'inizio del prossimo turno.',
-      '7. Il personaggio espone il fianco (vantaggio al prossimo attacco nemico).',
-      '8. L\'attacco attira l\'attenzione di un nemico nuovo.',
-      '9. Il personaggio perde l\'equilibrio (svantaggio per 1 round).',
-      '10. Il personaggio grida involontariamente, attirando rinforzi.',
+      'L\'arma cade a terra a 1,5 m.',
+      'L\'attacco colpisce un alleato adiacente.',
+      'Il personaggio inciampa e cade prono.',
+      'La corda si rompe o l\'arma si inceppa.',
+      'L\'armatura subisce un\'ammaccatura (-1 CA fino a riparazione).',
+      'Il personaggio è stordito fino al suo prossimo turno.',
+      'Il personaggio espone il fianco (vantaggio al prossimo attacco nemico).',
+      'L\'attacco attira l\'attenzione di un nemico nuovo.',
+      'Il personaggio perde l\'equilibrio (svantaggio per 1 round).',
+      'Il personaggio grida involontariamente, attirando rinforzi.',
+      'L\'incantesimo si attiva sull\'incantatore stesso.',
+      'Il personaggio attiva una trappola ambientale.',
     ]
   },
   {
-    title: 'Follia a Breve Termine', icon: '🌀',
+    title: 'Follia a Breve Termine (d10)', icon: '🌀',
     rows: [
-      '1. Il personaggio è stordito per 1d10 minuti.',
-      '2. Il personaggio è convinto di essere uno PNG sconosciuto per 1 ora.',
-      '3. Il personaggio è compulsivamente onesto per 1d10 minuti.',
-      '4. Il personaggio ha il terrore di ogni oggetto magico per 1 ora.',
-      '5. Il personaggio parla solo in rima per 1d10 minuti.',
-      '6. Il personaggio si crede invincibile per 1 ora.',
-      '7. Il personaggio è ostile a chiunque per 1d10 minuti.',
-      '8. Il personaggio ride incontrollabilmente per 1 minuto ogni 1d10 minuti.',
-      '9. Il personaggio dimentica chi sono i suoi alleati per 1d10 minuti.',
-      '10. Il personaggio è tremante di terrore per 1d10 minuti.',
+      'Stordito per 1d10 minuti.',
+      'Convinto di essere uno PNG sconosciuto per 1 ora.',
+      'Compulsivamente onesto per 1d10 minuti.',
+      'Terrore di ogni oggetto magico per 1 ora.',
+      'Parla solo in rima per 1d10 minuti.',
+      'Crede di essere invincibile per 1 ora.',
+      'Ostile a chiunque per 1d10 minuti.',
+      'Ride incontrollabilmente per 1 minuto ogni 1d10 minuti.',
+      'Dimentica chi sono i suoi alleati per 1d10 minuti.',
+      'Tremante di terrore per 1d10 minuti.',
+    ]
+  },
+  {
+    title: 'Cosa C\'è in Tasca? (d20)', icon: '🎒',
+    rows: [
+      '1d6 monete di rame e una pelosina.',
+      'Una pergamena strappata con metà di una mappa.',
+      'Un dado a sei facce truccato.',
+      'Una chiave d\'argento senza serratura nota.',
+      'Un fazzoletto sporco di sangue.',
+      'Una piuma di fenice (vera? falsa?).',
+      'Un dente di drago bambino.',
+      'Una lettera d\'amore mai consegnata.',
+      'Un anello di ottone con incisione "AETERNUM".',
+      'Una manciata di sassolini colorati.',
+      'Un piccolo specchio a mano.',
+      'Un foglietto con un\'unica parola: "Ricorda".',
+      'Un\'ampolla di sale benedetto.',
+      'Una statuina di drago intagliata.',
+      'Un guanto sinistro spaiato.',
+      'Una collana con un dente di lupo.',
+      'Un piccolo libro di preghiere.',
+      'Mezzo biscotto vecchio di settimane.',
+      'Un sigillo di cera rotto.',
+      'Una bambola di pezza con un occhio bottone.',
+    ]
+  },
+  {
+    title: 'Eventi di Viaggio (d12)', icon: '🛤️',
+    rows: [
+      'Un cacciatore offre cibo in cambio di compagnia.',
+      'Un carro mercantile è bloccato e chiede aiuto.',
+      'Si trova un cadavere recente sulla strada.',
+      'Un branco di lupi (1d4) attraversa la pista.',
+      'Una pioggia improvvisa allaga il sentiero.',
+      'Un albero antico è caduto bloccando il passaggio.',
+      'Un gruppo di pellegrini si unisce al cammino.',
+      'Banditi (2d4) tentano un\'imboscata.',
+      'Si vedono colonne di fumo in lontananza.',
+      'Un druido eremita offre ospitalità per la notte.',
+      'Un fenomeno magico naturale (aurora, nebbia colorata).',
+      'Una creatura piccola ferita chiede aiuto.',
+    ]
+  },
+  {
+    title: 'Sogno Profetico (d10)', icon: '🌙',
+    rows: [
+      'Una mano di pietra emerge da un mare nero.',
+      'Tre lune piene appaiono nello stesso cielo.',
+      'Un drago bianco vola sopra una foresta in fiamme.',
+      'Una bambina canta una ninna nanna in una lingua sconosciuta.',
+      'Un albero di metallo cresce dal centro di un castello.',
+      'Le stelle si spengono una a una.',
+      'Una porta dorata in mezzo al deserto.',
+      'Un labirinto di specchi infiniti.',
+      'Un trono vuoto ricoperto di ragnatele.',
+      'Una corona che cammina da sola tra rovine.',
+    ]
+  },
+  {
+    title: 'Profumi della Città (d12)', icon: '👃',
+    rows: [
+      'Cumino e cardamomo da una bancarella.',
+      'Pesce salato e catrame dal porto.',
+      'Pane appena sfornato.',
+      'Sterco di cavallo e fieno fresco.',
+      'Fumo di legna e brace.',
+      'Sudore e cuoio da un mercante.',
+      'Profumo dolciastro di gelsomino.',
+      'Carne arrostita e vino versato.',
+      'Olio di lampada bruciato.',
+      'Aroma intenso di erbe medicinali.',
+      'Fumo dolce dell\'oppio.',
+      'Sangue fresco da un macellaio.',
+    ]
+  },
+  {
+    title: 'Oggetti Magici Strani (d10)', icon: '🔮',
+    rows: [
+      'Un cucchiaio che si riempie di zuppa calda 1/giorno.',
+      'Un pettine che fa crescere capelli e barba di 1 cm/uso.',
+      'Un sacchetto che produce un fiammifero acceso 3/giorno.',
+      'Una scarpa che predice se pioverà domani.',
+      'Un dado che indovina sempre l\'età di una persona.',
+      'Una candela che brucia per 24 ore senza consumarsi.',
+      'Una bambola che ripete l\'ultima frase udita.',
+      'Un sigillo che fa apparire un piccolo arcobaleno.',
+      'Una bussola che punta sempre alla taverna più vicina.',
+      'Un piatto che fa apparire una porzione di pane (1 pasto/giorno).',
+    ]
+  },
+  {
+    title: 'Trovate sul Cadavere (d10)', icon: '⚰️',
+    rows: [
+      'Un anello con incisione "Per sempre tua, R."',
+      '17 mp e 3 mo in una borsa di cuoio.',
+      'Una pergamena: lista di nomi cancellati uno per uno.',
+      'Una bottiglietta di veleno (4 dosi).',
+      'Una lettera sigillata indirizzata "Al Re".',
+      'Un coltello con il nome di un compagno inciso.',
+      'Una mappa di un quartiere malfamato con una X rossa.',
+      'Un medaglione con dentro un ritratto sbiadito.',
+      'Un tatuaggio fresco a forma di occhio sul polso.',
+      'Una chiave dorata pesante.',
     ]
   },
 ]
@@ -512,7 +858,7 @@ const TABLES = [
 function TabelleTab() {
   const [rolled, setRolled] = useState({})
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
       {TABLES.map(table => (
         <div key={table.title} className="card" style={{ padding: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
@@ -526,7 +872,7 @@ function TabelleTab() {
               <RefreshCw size={13} /> Tira
             </button>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 280, overflow: 'auto' }}>
             {table.rows.map((row, i) => (
               <div key={i} style={{
                 fontSize: '0.78rem', padding: '4px 8px', borderRadius: 4,
@@ -535,7 +881,7 @@ function TabelleTab() {
                 border: `1px solid ${rolled[table.title] === i ? '#3730a3' : 'transparent'}`,
                 fontWeight: rolled[table.title] === i ? 600 : 400,
               }}>
-                {row}
+                <span style={{ color: '#475569', marginRight: 6 }}>{i + 1}.</span> {row}
               </div>
             ))}
           </div>
@@ -546,7 +892,6 @@ function TabelleTab() {
 }
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
-
 const TABS = [
   { id: 'generatori', label: 'Generatori', icon: Wand2 },
   { id: 'mostri', label: 'Mostri', icon: BookOpen },
@@ -556,41 +901,37 @@ const TABS = [
 
 export default function DMToolsPage() {
   const [tab, setTab] = useState('generatori')
+  const [selected, setSelected] = useState(null)
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 3rem)', overflow: 'hidden' }}>
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#f1f5f9' }}>Strumenti DM</h1>
       </div>
 
-      {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: '1rem', flexShrink: 0, flexWrap: 'wrap' }}>
         {TABS.map(({ id, label, icon: Icon }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6,
-              padding: '0.45rem 1rem', borderRadius: 8, fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
-              background: tab === id ? '#1e1040' : 'transparent',
-              color: tab === id ? '#a78bfa' : '#64748b',
-              border: `1px solid ${tab === id ? '#3730a3' : '#252840'}`,
-              transition: 'all 0.15s',
-            }}
-          >
+          <button key={id} onClick={() => setTab(id)} style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            padding: '0.45rem 1rem', borderRadius: 8, fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer',
+            background: tab === id ? '#1e1040' : 'transparent',
+            color: tab === id ? '#a78bfa' : '#64748b',
+            border: `1px solid ${tab === id ? '#3730a3' : '#252840'}`,
+            transition: 'all 0.15s',
+          }}>
             <Icon size={14} /> {label}
           </button>
         ))}
       </div>
 
-      {/* Content */}
       <div style={{ flex: 1, overflow: 'auto', paddingBottom: '2rem' }}>
-        {tab === 'generatori' && <GeneratoriTab />}
-        {tab === 'mostri' && <MostriTab />}
-        {tab === 'magie' && <MagieTab />}
+        {tab === 'generatori' && <GeneratoriTab onSelect={setSelected} />}
+        {tab === 'mostri' && <MostriTab onSelect={setSelected} />}
+        {tab === 'magie' && <MagieTab onSelect={setSelected} />}
         {tab === 'tabelle' && <TabelleTab />}
       </div>
+
+      {selected && <ItemDetailModal item={selected} onClose={() => setSelected(null)} />}
     </div>
   )
 }

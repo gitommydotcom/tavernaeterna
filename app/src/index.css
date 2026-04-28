@@ -561,3 +561,24 @@ input.cs-hp-current { color: #b91c1c; }
   }
   .layout-sidebar, .layout-topbar, .nav-header, nav { display: none !important; }
 }
+
+/* ════════════════════════════════════════════════════════════
+   DM TOOLS — chip cliccabili nei risultati dei generatori
+════════════════════════════════════════════════════════════ */
+.dm-chip {
+  display: inline;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  transition: color 0.1s, text-decoration-color 0.1s;
+}
+.dm-chip-monster { color: #ef4444; text-decoration-color: #7f1d1d; }
+.dm-chip-monster:hover { color: #f87171; text-decoration-color: #ef4444; }
+.dm-chip-spell { color: #a78bfa; text-decoration-color: #4c1d95; }
+.dm-chip-spell:hover { color: #c4b5fd; text-decoration-color: #a78bfa; }
+.dm-chip-item { color: #f59e0b; text-decoration-color: #78350f; }
+.dm-chip-item:hover { color: #fbbf24; text-decoration-color: #f59e0b; }
