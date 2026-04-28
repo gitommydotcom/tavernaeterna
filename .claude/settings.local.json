@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:3006)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(node scripts/parse_srd.mjs)",
+      "Bash(node -e ' *)",
+      "Bash(npm --prefix app run build)",
+      "Bash(netlify status *)",
+      "mcp__594e6b6a-a551-4293-afca-d4518e25fda7__netlify-project-services-reader",
+      "mcp__594e6b6a-a551-4293-afca-d4518e25fda7__netlify-deploy-services-updater",
+      "Bash(npx -y @netlify/mcp@latest --site-id 3c096902-149c-4b8e-a348-1b0996b2b114 --proxy-path \"https://netlify-mcp.netlify.app/proxy/eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..J5mxOqQJPMcLvukX.apb5R8eeCrtQAvTm7X-KUiMqSDMVN2DhmkRfLoR7MI-H_sqAs3J2D-DxGatVHQWoxnN0zeR0YC_-BXJQS9E2TA-uFy_OLA_cUY1aYxmHeE93ip0B-CUTFterBzZVu8zc4pxFVemfLQN_UPlCOOv7VJfnme6pRwcQXnnMUBobqjhGeCirsw2MzfHwltn4GKMUzN47j94Jtz6ndIP0GUZKFIkZ3tEJpvYVnDI1aN_fxOhEex2FSz-BnBo3TPORkEl95SQ3y2vhqr421vI9VlRm_Q68a3DuAbxYBdT_EtGwlZlgCaVAicHSFeAnY5PVJcDFHVE9QGYPubYop0QE53vRiTTkrGunWoiLicRyVnW4UCesDLBE8A.5CBzht1TGT8vBZTfUr-URQ\")",
+      "Bash(netlify deploy *)",
+      "Bash(node -e \"console.log\\(require\\('/Users/tomas/Desktop/claude code dir/6 - LA TAVERNA/app/node_modules/@supabase/supabase-js/package.json'\\).main\\)\")",
+      "Bash(curl -s 'https://gaopiziqkushqltudhqb.supabase.co/rest/v1/characters?select=id,data' -H 'apikey: sb_publishable_qns0UB2UJxGa4PB782GRDw_Vg-qdd2O' -H 'Authorization: Bearer sb_publishable_qns0UB2UJxGa4PB782GRDw_Vg-qdd2O')",
+      "Bash(python3 -c \"import sys,json; [print\\(r['id'], r['data'].get\\('name','?'\\)\\) for r in json.load\\(sys.stdin\\)]\")",
+      "Bash(npx netlify *)",
+      "Bash(node -e \"import\\('./src/data/srd.json', {assert:{type:'json'}}\\).then\\(m => { const spells = Object.values\\(m.default.spells\\); console.log\\(JSON.stringify\\(spells[0], null, 2\\)\\); console.log\\('---'\\); console.log\\(JSON.stringify\\(spells[5], null, 2\\)\\); }\\)\")",
+      "Bash(node -e \"const d = require\\('./srd.json'\\); const s = Object.values\\(d.spells\\); console.log\\(JSON.stringify\\(s[0], null, 2\\)\\); console.log\\('---'\\); console.log\\(JSON.stringify\\(s[10], null, 2\\)\\);\")",
+      "Bash(node -e \"const d = require\\('./srd.json'\\); const s = Object.values\\(d.spells\\); const scuole = [...new Set\\(s.map\\(x=>x.scuola\\)\\)].sort\\(\\); console.log\\(scuole.join\\('\\\\n'\\)\\);\")",
+      "Bash(node -e \"const d = require\\('/Users/tomas/Desktop/claude code dir/6 - LA TAVERNA/app/src/data/srd.json'\\); console.log\\('abilities keys count:', Object.keys\\(d.abilities||{}\\).length\\); console.log\\(Object.keys\\(d.abilities||{}\\).slice\\(0, 30\\).join\\('\\\\n'\\)\\)\")",
+      "Bash(git ls-remote *)",
+      "Bash(gh auth *)",
+      "Bash(git config *)",
+      "Bash(curl -sI https://github.com/gitommydotcom/tavernaeterna)",
+      "Bash(curl -sI https://api.github.com/repos/gitommydotcom/tavernaeterna)"
+    ]
+  }
+}
