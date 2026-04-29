@@ -309,7 +309,10 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
             <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
               <input className="input" defaultValue={c.name}
                 onBlur={e => { const v = e.target.value.trim(); if (v) onUpdate({ name: v, initials: v.slice(0, 2).toUpperCase() }) }}
-                style={{ fontSize: '0.95rem', fontWeight: 700, padding: '0.25rem 0.5rem' }} placeholder="Nome" />
+                style={{ fontSize: '0.95rem', fontWeight: 700, padding: '0.25rem 0.5rem' }} placeholder="Nome personaggio" />
+              <input className="input" defaultValue={c.player_name || ''}
+                onBlur={e => onUpdate({ player_name: e.target.value.trim() })}
+                style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem' }} placeholder="Nome del giocatore" />
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                 <input className="input" defaultValue={c.race} onBlur={e => onUpdate({ race: e.target.value })} style={{ width: 80, fontSize: '0.72rem', padding: '0.2rem 0.4rem' }} placeholder="Razza" />
                 <input className="input" defaultValue={c.class} onBlur={e => onUpdate({ class: e.target.value })} style={{ width: 85, fontSize: '0.72rem', padding: '0.2rem 0.4rem' }} placeholder="Classe" />
@@ -321,6 +324,7 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
             <div style={{ flex: 1, minWidth: 0 }}>
               <h1 style={{ margin: 0, fontSize: 'clamp(1.1rem, 3vw, 1.4rem)', fontWeight: 700, color: '#f1f5f9' }}>{c.name}</h1>
               <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.85rem', marginTop: 2 }}>{c.race} · {c.class} {c.level}{c.alignment ? ` · ${c.alignment}` : ''}</p>
+              {c.player_name && <p style={{ margin: '2px 0 0', color: '#64748b', fontSize: '0.72rem', fontStyle: 'italic' }}>Giocato da {c.player_name}</p>}
             </div>
           )}
         </div>

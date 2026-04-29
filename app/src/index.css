@@ -551,13 +551,24 @@ input.cs-hp-current { color: #b91c1c; }
 .cs-trait-row { font-size: 0.8rem; padding: 2px 0; }
 .cs-description { font-size: 0.82rem; line-height: 1.5; white-space: pre-wrap; }
 
-/* Print */
+/* Print — solo la scheda, niente menu o navigazione */
 @media print {
-  body { background: white !important; }
+  @page { size: A4; margin: 1cm; }
+  html, body, #root, .lt-layout, .lt-content, .lt-main {
+    background: white !important;
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+  .lt-sidebar, .lt-bottom-nav, .lt-mobile-header, .lt-drawer-backdrop {
+    display: none !important;
+  }
+  .lt-main { padding: 0 !important; }
   .classic-toolbar { display: none !important; }
   .parchment {
     box-shadow: none !important;
     border: 1px solid #6b4a1f !important;
+    page-break-inside: avoid;
   }
   .layout-sidebar, .layout-topbar, .nav-header, nav { display: none !important; }
 }
@@ -582,3 +593,38 @@ input.cs-hp-current { color: #b91c1c; }
 .dm-chip-spell:hover { color: #c4b5fd; text-decoration-color: #a78bfa; }
 .dm-chip-item { color: #f59e0b; text-decoration-color: #78350f; }
 .dm-chip-item:hover { color: #fbbf24; text-decoration-color: #f59e0b; }
+
+/* ════════════════════════════════════════════════════════════
+   CLASSIC SHEET — avatar nel header
+════════════════════════════════════════════════════════════ */
+.cs-header { grid-template-columns: auto 1fr 2fr !important; align-items: center; }
+@media (max-width: 900px) {
+  .cs-header { grid-template-columns: auto 1fr !important; }
+  .cs-header .cs-meta { grid-column: 1/-1; }
+}
+.cs-avatar-wrap {
+  position: relative;
+  width: 96px; height: 96px;
+  flex-shrink: 0;
+}
+.cs-avatar {
+  width: 96px; height: 96px;
+  border-radius: 8px;
+  border: 2px solid #6b4a1f;
+  object-fit: cover;
+  display: block;
+}
+.cs-avatar-placeholder {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.6rem; font-weight: 700; color: #fff;
+}
+.cs-avatar-overlay {
+  position: absolute; inset: 0;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; opacity: 0; transition: opacity 0.15s;
+  color: #fff;
+}
+.cs-avatar-wrap:hover .cs-avatar-overlay { opacity: 1; }
+@media print { .cs-avatar-overlay { display: none !important; } }
