@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { Wand2, BookOpen, Scroll, Table2, RefreshCw, Search, X, Info, Users } from 'lucide-react'
 import { MONSTERS } from '../../data/monsters_it'
 import { ITEMS, ITEMS_BY_RARITY, findItem } from '../../data/items_it'
+import { CLASSI_INCANTATORI, getSpellClasses } from '../../data/spell_classes'
 import { getAllSpells, lookupSpell, lookupTrait } from '../../lib/srd'
 import { supabase } from '../../lib/supabase'
 
@@ -438,9 +439,24 @@ function MonsterDetail({ m }) {
 }
 
 function SpellDetail({ s }) {
+  const classes = getSpellClasses(s)
   return (
     <>
-      {s.scuola && <p style={{ margin: '0 0 0.75rem', color: '#a78bfa', fontSize: '0.8rem', fontStyle: 'italic' }}>{s.scuola}</p>}
+      {s.scuola && <p style={{ margin: '0 0 0.5rem', color: '#a78bfa', fontSize: '0.8rem', fontStyle: 'italic' }}>{s.scuola}</p>}
+      {classes.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: '0.75rem' }}>
+          <span style={{ fontSize: '0.65rem', color: '#64748b', textTransform: 'uppercase', alignSelf: 'center', marginRight: 4 }}>Classi:</span>
+          {classes.map(cl => {
+            const meta = CLASSI_INCANTATORI.find(c => c.key === cl)
+            return (
+              <span key={cl} style={{
+                background: '#1e1040', color: '#a78bfa', border: '1px solid #3730a3',
+                borderRadius: 6, padding: '2px 8px', fontSize: '0.7rem', fontWeight: 600,
+              }}>{meta?.label || cl}</span>
+            )
+          })}
+        </div>
+      )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: '0.75rem' }}>
         {[['Lancio', s.tempo], ['Gittata', s.gittata], ['Durata', s.durata], ['Componenti', s.componenti]].filter(x => x[1]).map(([l, v]) => (
           <div key={l} style={{ background: '#0d0f18', border: '1px solid #1e2235', borderRadius: 6, padding: '4px 8px' }}>
@@ -489,189 +505,193 @@ function ClickableName({ name, onSelect }) {
   return <span>{trimmed}</span>
 }
 
-// ─── Generatori Tab — ora con SELECT integrati nelle card ───────────────────
+// ─── Generatori Tab — ogni card ha le proprie scelte interne ────────────────
 function GeneratoriTab({ onSelect }) {
-  const [livello, setLivello] = useState(1)
-  const [razza, setRazza] = useState('umano')
+  // Stato locale per le scelte di ciascuna card che ne ha bisogno
+  const [pngRazza, setPngRazza] = useState('umano')
+  const [nomeRazza, setNomeRazza] = useState('umano')
+  const [tesoroLv, setTesoroLv] = useState(1)
+  const [incontroLv, setIncontroLv] = useState(1)
+  const [negozioLv, setNegozioLv] = useState(1)
+  const [questLv, setQuestLv] = useState(1)
+  const [bossLv, setBossLv] = useState(1)
+
   const [results, setResults] = useState({})
   function gen(key, fn) { setResults(r => ({ ...r, [key]: fn() })) }
 
+  const lvSelect = (val, setter, w = 80) => (
+    <select className="select" value={val} onChange={e => setter(parseInt(e.target.value))}
+      style={{ height: 28, fontSize: '0.72rem', padding: '0 4px', width: w }}>
+      {Array.from({ length: 20 }).map((_, i) => <option key={i+1} value={i+1}>Liv. {i+1}</option>)}
+    </select>
+  )
+  const razzaSelect = (val, setter) => (
+    <select className="select" value={val} onChange={e => setter(e.target.value)}
+      style={{ height: 28, fontSize: '0.72rem', padding: '0 4px', minWidth: 130 }}>
+      {RAZZE.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
+    </select>
+  )
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-      {/* Controlli globali */}
-      <div className="card" style={{ padding: '0.75rem 1rem', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Livello party</span>
-          <input type="number" min={1} max={20} value={livello}
-            onChange={e => setLivello(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))}
-            className="input" style={{ width: 60 }} />
-          <span style={{ color: '#475569', fontSize: '0.7rem' }}>(per Tesoro, Incontro, Negozio, Quest, Boss)</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ color: '#94a3b8', fontSize: '0.8rem' }}>Razza PNG</span>
-          <select className="select" value={razza} onChange={e => setRazza(e.target.value)} style={{ width: 160 }}>
-            {RAZZE.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
-          </select>
-        </div>
-      </div>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
+      {/* PNG completo (con select razza interno) */}
+      <GenCard title="PNG Completo" icon="🎭"
+        subAction={razzaSelect(pngRazza, setPngRazza)}
+        onGen={() => gen('png', () => genPNG(pngRazza))}
+        result={results.png ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div><strong>Nome:</strong> {results.png.nome} <span style={{ color: '#64748b' }}>({results.png.razza})</span></div>
+            <div><strong>Occupazione:</strong> {results.png.occupazione}</div>
+            <div><strong>Carattere:</strong> {results.png.carattere}</div>
+            <div><strong>Tic:</strong> {results.png.tic}</div>
+            <div><strong>Motivazione:</strong> {results.png.motivazione}</div>
+            <div><strong>Segreto:</strong> <span style={{ color: '#fbbf24' }}>{results.png.segreto}</span></div>
+          </div>
+        ) : null}
+      />
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
-        {/* PNG con razza scelta */}
-        <GenCard title={`PNG (${RAZZE.find(r => r.key === razza)?.label || 'Umano'})`} icon="🎭" onGen={() => gen('png', () => genPNG(razza))}
-          result={results.png ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <div><strong>Nome:</strong> {results.png.nome} <span style={{ color: '#64748b' }}>({results.png.razza})</span></div>
-              <div><strong>Occupazione:</strong> {results.png.occupazione}</div>
-              <div><strong>Carattere:</strong> {results.png.carattere}</div>
-              <div><strong>Tic:</strong> {results.png.tic}</div>
-              <div><strong>Motivazione:</strong> {results.png.motivazione}</div>
-              <div><strong>Segreto:</strong> <span style={{ color: '#fbbf24' }}>{results.png.segreto}</span></div>
+      {/* Solo Nome (con select razza interno) */}
+      <GenCard title="Solo Nome" icon="👤"
+        subAction={razzaSelect(nomeRazza, setNomeRazza)}
+        onGen={() => gen('nome', () => genNome(nomeRazza))} result={results.nome} />
+
+      <GenCard title="Nome Taverna" icon="🍺" onGen={() => gen('taverna', genTaverna)} result={results.taverna} />
+      <GenCard title="Meteo" icon="☁️" onGen={() => gen('meteo', genMeteo)} result={results.meteo} />
+      <GenCard title="Voce di Taverna" icon="🗣️" onGen={() => gen('voce', genVoce)} result={results.voce} />
+      <GenCard title="Quartiere Città" icon="🏙️" onGen={() => gen('citta', genCitta)} result={results.citta} />
+
+      <GenCard title="Gancio Avventura" icon="🪝" onGen={() => gen('gancio', genGancio)}
+        result={results.gancio ? (
+          <div>
+            <div><strong>Chi:</strong> {results.gancio.chi}</div>
+            <div><strong>Cosa:</strong> {results.gancio.cosa}</div>
+            <div><strong>Dove:</strong> {results.gancio.dove}</div>
+          </div>
+        ) : null}
+      />
+
+      <GenCard title="Stanza Dungeon" icon="🏚️" onGen={() => gen('stanza', genStanza)}
+        result={results.stanza ? (
+          <div>
+            <div><strong>Tipo:</strong> {results.stanza.tipo}</div>
+            <div><strong>Dettaglio:</strong> {results.stanza.caratteristica}</div>
+            <div><strong>Trappola:</strong> {results.stanza.trappola}</div>
+            <div><strong>Uscite:</strong> {results.stanza.uscite}</div>
+          </div>
+        ) : null}
+      />
+
+      {/* Tesoro con livello interno */}
+      <GenCard title="Tesoro" icon="💎"
+        subAction={lvSelect(tesoroLv, setTesoroLv)}
+        onGen={() => gen('tesoro', () => genTesoro(tesoroLv))}
+        result={results.tesoro ? (
+          <div>
+            <div style={{ fontSize: '0.8rem', marginBottom: 6 }}>
+              <strong>Monete:</strong>{' '}
+              <span style={{ color: '#f59e0b' }}>{results.tesoro.mo} mo</span>,{' '}
+              <span style={{ color: '#cbd5e1' }}>{results.tesoro.mp} mp</span>
+              {results.tesoro.gemme && <>, <span style={{ color: '#a78bfa' }}>{results.tesoro.gemme}</span></>}
             </div>
-          ) : null}
-        />
-
-        <GenCard title="Solo Nome" icon="👤"
-          subAction={(<select className="select" value={razza} onChange={e => setRazza(e.target.value)} style={{ height: 26, fontSize: '0.7rem', padding: '0 4px', minWidth: 110 }}>
-            {RAZZE.map(r => <option key={r.key} value={r.key}>{r.label}</option>)}
-          </select>)}
-          onGen={() => gen('nome', () => genNome(razza))} result={results.nome} />
-
-        <GenCard title="Nome Taverna" icon="🍺" onGen={() => gen('taverna', genTaverna)} result={results.taverna} />
-        <GenCard title="Meteo" icon="☁️" onGen={() => gen('meteo', genMeteo)} result={results.meteo} />
-        <GenCard title="Voce di Taverna" icon="🗣️" onGen={() => gen('voce', genVoce)} result={results.voce} />
-        <GenCard title="Quartiere Città" icon="🏙️" onGen={() => gen('citta', genCitta)} result={results.citta} />
-
-        <GenCard title="Gancio Avventura" icon="🪝" onGen={() => gen('gancio', genGancio)}
-          result={results.gancio ? (
-            <div>
-              <div><strong>Chi:</strong> {results.gancio.chi}</div>
-              <div><strong>Cosa:</strong> {results.gancio.cosa}</div>
-              <div><strong>Dove:</strong> {results.gancio.dove}</div>
-            </div>
-          ) : null}
-        />
-
-        <GenCard title="Stanza Dungeon" icon="🏚️" onGen={() => gen('stanza', genStanza)}
-          result={results.stanza ? (
-            <div>
-              <div><strong>Tipo:</strong> {results.stanza.tipo}</div>
-              <div><strong>Dettaglio:</strong> {results.stanza.caratteristica}</div>
-              <div><strong>Trappola:</strong> {results.stanza.trappola}</div>
-              <div><strong>Uscite:</strong> {results.stanza.uscite}</div>
-            </div>
-          ) : null}
-        />
-
-        {/* Tesoro con select livello integrato */}
-        <GenCard title={`Tesoro Liv. ${livello}`} icon="💎"
-          subAction={(<select className="select" value={livello} onChange={e => setLivello(parseInt(e.target.value))} style={{ height: 26, fontSize: '0.7rem', padding: '0 4px', width: 70 }}>
-            {Array.from({ length: 20 }).map((_, i) => <option key={i+1} value={i+1}>Liv. {i+1}</option>)}
-          </select>)}
-          onGen={() => gen('tesoro', () => genTesoro(livello))}
-          result={results.tesoro ? (
-            <div>
-              <div style={{ fontSize: '0.8rem', marginBottom: 6 }}>
-                <strong>Monete:</strong>{' '}
-                <span style={{ color: '#f59e0b' }}>{results.tesoro.mo} mo</span>,{' '}
-                <span style={{ color: '#cbd5e1' }}>{results.tesoro.mp} mp</span>
-                {results.tesoro.gemme && <>, <span style={{ color: '#a78bfa' }}>{results.tesoro.gemme}</span></>}
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {results.tesoro.items.map((it, i) => (
-                  <div key={i} style={{ fontSize: '0.78rem' }}>
-                    ◆ <ClickableName name={it.name} onSelect={onSelect} />{' '}
-                    <span style={{ fontSize: '0.65rem', color: RARITY_COLORS[it.rarity] || '#64748b' }}>[{it.rarity}]</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        />
-
-        {/* Incontro con select livello */}
-        <GenCard title={`Incontro Liv. ${livello}`} icon="⚔️"
-          subAction={(<select className="select" value={livello} onChange={e => setLivello(parseInt(e.target.value))} style={{ height: 26, fontSize: '0.7rem', padding: '0 4px', width: 70 }}>
-            {Array.from({ length: 20 }).map((_, i) => <option key={i+1} value={i+1}>Liv. {i+1}</option>)}
-          </select>)}
-          onGen={() => gen('incontro', () => genIncontro(livello))}
-          result={results.incontro?.gruppo?.length ? (
-            <div>
-              {results.incontro.gruppo.map((g, i) => (
-                <div key={i} style={{ fontSize: '0.85rem' }}>
-                  {g.count}× <ClickableName name={g.monster.name} onSelect={onSelect} />{' '}
-                  <span style={{ color: '#64748b', fontSize: '0.7rem' }}>(CR {g.monster.cr})</span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {results.tesoro.items.map((it, i) => (
+                <div key={i} style={{ fontSize: '0.78rem' }}>
+                  ◆ <ClickableName name={it.name} onSelect={onSelect} />{' '}
+                  <span style={{ fontSize: '0.65rem', color: RARITY_COLORS[it.rarity] || '#64748b' }}>[{it.rarity}]</span>
                 </div>
               ))}
             </div>
-          ) : null}
-        />
+          </div>
+        ) : null}
+      />
 
-        {/* Negozio */}
-        <GenCard title={`Negozio Liv. ${livello}`} icon="🏪" onGen={() => gen('negozio', () => genNegozio(livello))}
-          result={results.negozio ? (
-            <div>
-              <div style={{ marginBottom: 4 }}><strong>{results.negozio.nome}</strong></div>
-              <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: 6 }}>
-                Oste: {results.negozio.oste.nome} ({results.negozio.oste.carattere})
+      {/* Incontro con livello interno */}
+      <GenCard title="Incontro Casuale" icon="⚔️"
+        subAction={lvSelect(incontroLv, setIncontroLv)}
+        onGen={() => gen('incontro', () => genIncontro(incontroLv))}
+        result={results.incontro?.gruppo?.length ? (
+          <div>
+            {results.incontro.gruppo.map((g, i) => (
+              <div key={i} style={{ fontSize: '0.85rem' }}>
+                {g.count}× <ClickableName name={g.monster.name} onSelect={onSelect} />{' '}
+                <span style={{ color: '#64748b', fontSize: '0.7rem' }}>(CR {g.monster.cr})</span>
               </div>
-              <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Inventario</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {results.negozio.stock.map((it, i) => (
-                  <div key={i} style={{ fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', gap: 6 }}>
-                    <span><ClickableName name={it.name} onSelect={onSelect} /></span>
-                    <span style={{ color: '#f59e0b', fontWeight: 600 }}>{it.value_mo > 0 ? `${it.value_mo} mo` : '—'}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        />
+            ))}
+          </div>
+        ) : null}
+      />
 
-        {/* Quest completa */}
-        <GenCard title={`Quest Completa Liv. ${livello}`} icon="📜" onGen={() => gen('quest', () => genQuest(livello))}
-          result={results.quest ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.78rem' }}>
-              <div><strong>Gancio:</strong> {results.quest.gancio.chi} {results.quest.gancio.cosa} {results.quest.gancio.dove}.</div>
-              <div><strong>Twist:</strong> {results.quest.complicazione}</div>
-              <div><strong>Incontro:</strong> {results.quest.incontro.gruppo.map((g, i) => (
-                <span key={i}>{i > 0 && ', '}{g.count}× <ClickableName name={g.monster.name} onSelect={onSelect} /></span>
-              ))}</div>
-              <div><strong>Loot:</strong> {results.quest.tesoro.mo} mo, {results.quest.tesoro.items.map((it, i) => (
-                <span key={i}>{i > 0 && ', '}<ClickableName name={it.name} onSelect={onSelect} /></span>
-              ))}</div>
-              <div><strong>Ricompensa:</strong> {results.quest.ricompensa}</div>
+      {/* Negozio con livello interno */}
+      <GenCard title="Negozio" icon="🏪"
+        subAction={lvSelect(negozioLv, setNegozioLv)}
+        onGen={() => gen('negozio', () => genNegozio(negozioLv))}
+        result={results.negozio ? (
+          <div>
+            <div style={{ marginBottom: 4 }}><strong>{results.negozio.nome}</strong></div>
+            <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginBottom: 6 }}>
+              Oste: {results.negozio.oste.nome} ({results.negozio.oste.carattere})
             </div>
-          ) : null}
-        />
-
-        {/* Boss */}
-        <GenCard title={`Boss Liv. ${livello}`} icon="👹" onGen={() => gen('boss', () => genBoss(livello))}
-          result={results.boss ? (
-            <div style={{ fontSize: '0.78rem' }}>
-              <div><strong>Boss:</strong> <ClickableName name={results.boss.boss.name} onSelect={onSelect} /> <span style={{ color: '#64748b' }}>(CR {results.boss.boss.cr})</span></div>
-              <div><strong>Ambientazione:</strong> {results.boss.lair}</div>
-              <div><strong>Sgherri:</strong> {results.boss.minions}× <ClickableName name={results.boss.minionType?.name} onSelect={onSelect} /></div>
-              <div style={{ marginTop: 4 }}><strong>Effetto Tana:</strong> {results.boss.legendary}</div>
+            <div style={{ fontSize: '0.7rem', color: '#94a3b8', textTransform: 'uppercase', marginBottom: 4 }}>Inventario</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {results.negozio.stock.map((it, i) => (
+                <div key={i} style={{ fontSize: '0.78rem', display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+                  <span><ClickableName name={it.name} onSelect={onSelect} /></span>
+                  <span style={{ color: '#f59e0b', fontWeight: 600 }}>{it.value_mo > 0 ? `${it.value_mo} mo` : '—'}</span>
+                </div>
+              ))}
             </div>
-          ) : null}
-        />
+          </div>
+        ) : null}
+      />
 
-        {/* Pozione misteriosa */}
-        <GenCard title="Pozione Misteriosa" icon="🧪" onGen={() => gen('pozione', genPozioneMisteriosa)}
-          result={results.pozione ? (
-            <div style={{ fontSize: '0.78rem' }}>
-              <div><strong>Aspetto:</strong> {results.pozione.aspetto}</div>
-              <div><strong>Odore:</strong> {results.pozione.odore}</div>
-              <div><strong>Sapore:</strong> {results.pozione.sapore}</div>
-              <div style={{ marginTop: 6 }}><strong>Effetto reale:</strong> <ClickableName name={results.pozione.effetto.name} onSelect={onSelect} /></div>
-            </div>
-          ) : null}
-        />
+      {/* Quest completa con livello interno */}
+      <GenCard title="Quest Completa" icon="📜"
+        subAction={lvSelect(questLv, setQuestLv)}
+        onGen={() => gen('quest', () => genQuest(questLv))}
+        result={results.quest ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: '0.78rem' }}>
+            <div><strong>Gancio:</strong> {results.quest.gancio.chi} {results.quest.gancio.cosa} {results.quest.gancio.dove}.</div>
+            <div><strong>Twist:</strong> {results.quest.complicazione}</div>
+            <div><strong>Incontro:</strong> {results.quest.incontro.gruppo.map((g, i) => (
+              <span key={i}>{i > 0 && ', '}{g.count}× <ClickableName name={g.monster.name} onSelect={onSelect} /></span>
+            ))}</div>
+            <div><strong>Loot:</strong> {results.quest.tesoro.mo} mo, {results.quest.tesoro.items.map((it, i) => (
+              <span key={i}>{i > 0 && ', '}<ClickableName name={it.name} onSelect={onSelect} /></span>
+            ))}</div>
+            <div><strong>Ricompensa:</strong> {results.quest.ricompensa}</div>
+          </div>
+        ) : null}
+      />
 
-        <GenCard title="Maledizione" icon="☠️" onGen={() => gen('maled', () => pick(MALEDIZIONI))} result={results.maled} />
-        <GenCard title="Benedizione" icon="✨" onGen={() => gen('bened', () => pick(BENEDIZIONI))} result={results.bened} />
-        <GenCard title="Sogno Profetico" icon="🌙" onGen={() => gen('sogno', () => pick(SOGNI_PROFETICI))} result={results.sogno} />
-      </div>
+      {/* Boss con livello interno */}
+      <GenCard title="Boss" icon="👹"
+        subAction={lvSelect(bossLv, setBossLv)}
+        onGen={() => gen('boss', () => genBoss(bossLv))}
+        result={results.boss ? (
+          <div style={{ fontSize: '0.78rem' }}>
+            <div><strong>Boss:</strong> <ClickableName name={results.boss.boss.name} onSelect={onSelect} /> <span style={{ color: '#64748b' }}>(CR {results.boss.boss.cr})</span></div>
+            <div><strong>Ambientazione:</strong> {results.boss.lair}</div>
+            <div><strong>Sgherri:</strong> {results.boss.minions}× <ClickableName name={results.boss.minionType?.name} onSelect={onSelect} /></div>
+            <div style={{ marginTop: 4 }}><strong>Effetto Tana:</strong> {results.boss.legendary}</div>
+          </div>
+        ) : null}
+      />
+
+      {/* Pozione misteriosa */}
+      <GenCard title="Pozione Misteriosa" icon="🧪" onGen={() => gen('pozione', genPozioneMisteriosa)}
+        result={results.pozione ? (
+          <div style={{ fontSize: '0.78rem' }}>
+            <div><strong>Aspetto:</strong> {results.pozione.aspetto}</div>
+            <div><strong>Odore:</strong> {results.pozione.odore}</div>
+            <div><strong>Sapore:</strong> {results.pozione.sapore}</div>
+            <div style={{ marginTop: 6 }}><strong>Effetto reale:</strong> <ClickableName name={results.pozione.effetto.name} onSelect={onSelect} /></div>
+          </div>
+        ) : null}
+      />
+
+      <GenCard title="Maledizione" icon="☠️" onGen={() => gen('maled', () => pick(MALEDIZIONI))} result={results.maled} />
+      <GenCard title="Benedizione" icon="✨" onGen={() => gen('bened', () => pick(BENEDIZIONI))} result={results.bened} />
+      <GenCard title="Sogno Profetico" icon="🌙" onGen={() => gen('sogno', () => pick(SOGNI_PROFETICI))} result={results.sogno} />
     </div>
   )
 }
@@ -785,9 +805,15 @@ function MagieTab({ onSelect }) {
   const [search, setSearch] = useState('')
   const [levelFilter, setLevelFilter] = useState('all')
   const [schoolFilter, setSchoolFilter] = useState('all')
+  const [classFilter, setClassFilter] = useState('all')
 
   const enriched = useMemo(() =>
-    allSpells.map(s => ({ ...s, _level: parseSpellLevel(s.scuola), _school: parseSpellSchool(s.scuola) }))
+    allSpells.map(s => ({
+      ...s,
+      _level: parseSpellLevel(s.scuola),
+      _school: parseSpellSchool(s.scuola),
+      _classes: getSpellClasses(s),
+    }))
       .sort((a, b) => {
         if (a._level !== b._level) return (a._level ?? 99) - (b._level ?? 99)
         return (a.name || '').localeCompare(b.name || '')
@@ -810,14 +836,27 @@ function MagieTab({ onSelect }) {
       list = list.filter(s => s._level === lv)
     }
     if (schoolFilter !== 'all') list = list.filter(s => s._school === schoolFilter)
+    if (classFilter !== 'all') list = list.filter(s => s._classes.includes(classFilter))
     return list
-  }, [enriched, search, levelFilter, schoolFilter])
+  }, [enriched, search, levelFilter, schoolFilter, classFilter])
 
   const counts = useMemo(() => {
     const c = {}
     enriched.forEach(s => { c[s._level ?? 'x'] = (c[s._level ?? 'x'] || 0) + 1 })
     return c
   }, [enriched])
+
+  // Count per classe (aggiornato dopo gli altri filtri esclusa classe)
+  const classCounts = useMemo(() => {
+    let base = enriched
+    if (search) base = base.filter(s => (s.name || '').toLowerCase().includes(search.toLowerCase()))
+    if (levelFilter !== 'all') base = base.filter(s => s._level === parseInt(levelFilter))
+    if (schoolFilter !== 'all') base = base.filter(s => s._school === schoolFilter)
+    const c = {}
+    CLASSI_INCANTATORI.forEach(k => { c[k.key] = 0 })
+    base.forEach(s => s._classes.forEach(cl => { if (c[cl] != null) c[cl]++ }))
+    return c
+  }, [enriched, search, levelFilter, schoolFilter])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -826,6 +865,12 @@ function MagieTab({ onSelect }) {
           <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
           <input className="input" value={search} onChange={e => setSearch(e.target.value)} placeholder="Cerca incantesimo…" style={{ paddingLeft: 32, width: '100%' }} />
         </div>
+        <select className="select" value={classFilter} onChange={e => setClassFilter(e.target.value)} style={{ width: 160 }}>
+          <option value="all">Tutte le classi</option>
+          {CLASSI_INCANTATORI.map(c => (
+            <option key={c.key} value={c.key}>{c.label} ({classCounts[c.key] || 0})</option>
+          ))}
+        </select>
         <select className="select" value={levelFilter} onChange={e => setLevelFilter(e.target.value)} style={{ width: 150 }}>
           <option value="all">Tutti i livelli</option>
           <option value="0">Trucchetti ({counts[0] || 0})</option>
