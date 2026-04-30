@@ -96,7 +96,7 @@ export default function MapsPage() {
   if (loading) return <div style={{ color: '#64748b', padding: '2rem' }}>Caricamento mappe…</div>
 
   return (
-    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 3rem)', overflow: 'hidden', gap: 8 }}>
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 6rem)', overflow: 'hidden', gap: 8 }}>
 
       {/* ── Toolbar ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>

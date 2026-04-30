@@ -5,7 +5,8 @@ import {
   calculateSaveBonus, calculateSkillBonus, bonusStr,
 } from '../../data/characters'
 import { uploadImage } from '../../lib/cloudinary'
-import { ArrowLeft, Layers, FileText, Pencil, Printer, Trash2, Upload, Loader } from 'lucide-react'
+import { ArrowLeft, Pencil, Printer, Trash2, Upload, Loader } from 'lucide-react'
+import { ViewToggle } from './CharacterSheet'
 
 /* Vista classica della scheda — stile carta/pergamena. Tutti i campi modificabili in editMode. */
 export default function ClassicCharacterSheet({ character: c, isDM, onUpdate, onBack, onDelete, onChangeView }) {
@@ -46,22 +47,15 @@ export default function ClassicCharacterSheet({ character: c, isDM, onUpdate, on
       <div className="classic-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '0.75rem', flexWrap: 'wrap' }}>
         <button className="btn-icon" onClick={onBack}><ArrowLeft size={18} /></button>
         <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', background: '#0d0f18', borderRadius: 6, padding: 2, border: '1px solid #252840' }}>
-          <button onClick={() => onChangeView('moderna')} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4, background: 'transparent', color: '#64748b', border: 'none', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>
-            <Layers size={11} /> Moderna
-          </button>
-          <button onClick={() => onChangeView('classica')} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4, background: '#1e1040', color: '#a78bfa', border: 'none', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600 }}>
-            <FileText size={11} /> Classica
-          </button>
-        </div>
+        <ViewToggle view="classica" onChange={onChangeView} />
         <button onClick={() => setEditMode(v => !v)} style={{
-          display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6,
+          display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8,
           background: editMode ? '#1e1040' : '#1e2235',
           color: editMode ? '#a78bfa' : '#94a3b8',
           border: `1px solid ${editMode ? '#3730a3' : '#252840'}`,
-          cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600,
+          cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600,
         }}>
-          <Pencil size={12} /> {editMode ? 'Fine modifica' : 'Modifica scheda'}
+          <Pencil size={13} /> {editMode ? 'Fine modifica' : 'Modifica scheda'}
         </button>
         <button onClick={() => window.print()} className="btn btn-secondary btn-sm">
           <Printer size={13} /> Stampa

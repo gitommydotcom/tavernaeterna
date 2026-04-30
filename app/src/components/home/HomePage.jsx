@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { uploadImage, cloudinaryUrl } from '../../lib/cloudinary'
 import { improveStory } from '../../lib/groq'
-import { Shield, Edit3, Check, X, Upload, Wand2, RotateCcw, ChevronDown, BookOpen, User, MapPin, Package, FileText } from 'lucide-react'
+import { Edit3, Check, X, Upload, Wand2, RotateCcw, ChevronDown, BookOpen } from 'lucide-react'
 
 /* ── Stelle animate (sfondo) ────────────────────────────────── */
 function Stars() {
@@ -108,20 +108,11 @@ export default function HomePage() {
           </>
         )}
 
-        {/* Overlay scuro per leggibilità */}
+        {/* Overlay scuro solo in basso per leggibilità */}
         <div className="hp-overlay" />
 
-        {/* Bagliori decorativi (nascosti su mobile) */}
-        <div className="hp-glow hp-glow-purple" />
-        <div className="hp-glow hp-glow-cyan" />
-
-        {/* Contenuto centrale */}
+        {/* Contenuto in basso */}
         <div className="hp-content">
-          <div className="hp-badge">
-            <Shield size={12} />
-            <span>D&D 5a Edizione</span>
-          </div>
-
           {/* Titolo + tagline */}
           {editingHero ? (
             <div className="hp-edit-block">
@@ -217,12 +208,6 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Indicatore "scorri" sul fondo (solo se la storia è chiusa e c'è) */}
-        {!showStory && !editingHero && !editingStory && campaign.story_narrative && (
-          <button onClick={() => setShowStory(true)} className="hp-scroll-hint">
-            <ChevronDown size={20} />
-          </button>
-        )}
       </section>
 
       <style>{`
@@ -237,7 +222,7 @@ export default function HomePage() {
           position: relative;
           min-height: 100dvh;
           display: flex;
-          align-items: center;
+          align-items: flex-end;
           justify-content: center;
           overflow: hidden;
           padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
@@ -260,31 +245,15 @@ export default function HomePage() {
         }
 
         .hp-overlay {
-          position: absolute; inset: 0;
-          background: linear-gradient(to bottom,
-            rgba(13,15,24,0.4) 0%,
-            rgba(13,15,24,0.55) 50%,
-            rgba(13,15,24,0.85) 100%);
-          z-index: 1;
-        }
-
-        .hp-glow {
           position: absolute;
-          width: 400px; height: 400px;
-          border-radius: 50%;
-          pointer-events: none;
+          left: 0; right: 0; bottom: 0;
+          height: 55%;
+          background: linear-gradient(to bottom,
+            rgba(13,15,24,0) 0%,
+            rgba(13,15,24,0.55) 55%,
+            rgba(13,15,24,0.92) 100%);
           z-index: 1;
-        }
-        .hp-glow-purple {
-          top: 15%; left: 10%;
-          background: radial-gradient(circle, rgba(124,58,237,0.18) 0%, transparent 70%);
-        }
-        .hp-glow-cyan {
-          bottom: 20%; right: 10%;
-          background: radial-gradient(circle, rgba(8,145,178,0.15) 0%, transparent 70%);
-        }
-        @media (max-width: 768px) {
-          .hp-glow { width: 220px; height: 220px; }
+          pointer-events: none;
         }
 
         .hp-content {
@@ -292,28 +261,12 @@ export default function HomePage() {
           z-index: 2;
           width: 100%;
           max-width: 760px;
-          padding: 4rem 1.25rem 5rem;
+          padding: 1.5rem 1.25rem 2.5rem;
           text-align: center;
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 1rem;
-        }
-
-        .hp-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 6px;
-          background: rgba(124,58,237,0.18);
-          border: 1px solid rgba(124,58,237,0.35);
-          color: #a78bfa;
-          border-radius: 999px;
-          padding: 0.35rem 0.9rem;
-          font-size: 0.7rem;
-          font-weight: 700;
-          text-transform: uppercase;
-          letter-spacing: 0.15em;
-          backdrop-filter: blur(8px);
+          gap: 0.75rem;
         }
 
         .hp-title {
@@ -460,26 +413,11 @@ export default function HomePage() {
         }
         .hp-dm-btn:hover { color: #f1f5f9; border-color: #7c3aed; }
 
-        .hp-scroll-hint {
-          position: absolute;
-          bottom: 1.25rem;
-          left: 50%;
-          transform: translateX(-50%);
-          background: transparent;
-          border: none;
-          color: rgba(148,163,184,0.6);
-          cursor: pointer;
-          padding: 8px;
-          z-index: 3;
-          animation: bounce 2s ease infinite;
-        }
-        .hp-scroll-hint:hover { color: #cbd5e1; }
-
         /* Mobile tweaks */
         @media (max-width: 640px) {
           .hp-content {
-            padding: 3rem 1rem 4rem;
-            gap: 0.75rem;
+            padding: 1.25rem 1rem 2rem;
+            gap: 0.6rem;
           }
           .hp-title { letter-spacing: -0.02em; }
           .hp-cta { padding: 0.6rem 1.1rem; font-size: 0.8rem; }

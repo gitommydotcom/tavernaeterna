@@ -209,7 +209,7 @@ export default function CombatPage() {
   const current = participants[session.current_turn]
 
   return (
-    <div className="fade-in" style={{ display: 'flex', gap: '1rem', height: 'calc(100vh - 3rem)', overflow: 'hidden' }}>
+    <div className="fade-in" style={{ display: 'flex', gap: '1rem', minHeight: 'calc(100dvh - 6rem)', overflow: 'hidden' }}>
 
       {/* Main combat area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.875rem', overflow: 'hidden' }}>

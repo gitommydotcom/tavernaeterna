@@ -1140,7 +1140,7 @@ export default function DMToolsPage() {
   const [selected, setSelected] = useState(null)
 
   return (
-    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 3rem)', overflow: 'hidden' }}>
+    <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 6rem)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#f1f5f9' }}>Strumenti DM</h1>
       </div>

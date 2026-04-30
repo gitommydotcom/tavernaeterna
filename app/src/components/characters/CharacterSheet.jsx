@@ -127,6 +127,38 @@ function Clickable({ children, item, onSelect, style }) {
   )
 }
 
+/* ── View toggle (modern/classic) ──────────────────────────── */
+export function ViewToggle({ view, onChange }) {
+  const isModern = view === 'moderna'
+  return (
+    <div role="group" aria-label="Stile scheda" style={{
+      display: 'inline-flex', background: '#0d0f18', borderRadius: 10, padding: 3,
+      border: '1px solid #3730a3', boxShadow: '0 0 0 1px rgba(124,58,237,0.15)',
+    }}>
+      <button onClick={() => onChange('moderna')} aria-pressed={isModern} style={{
+        display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 7,
+        background: isModern ? 'linear-gradient(135deg, #7c3aed, #4f46e5)' : 'transparent',
+        color: isModern ? '#fff' : '#94a3b8',
+        border: 'none', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700,
+        boxShadow: isModern ? '0 2px 8px rgba(124,58,237,0.45)' : 'none',
+        transition: 'all 0.15s',
+      }}>
+        <Layers size={14} /> Moderna
+      </button>
+      <button onClick={() => onChange('classica')} aria-pressed={!isModern} style={{
+        display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 7,
+        background: !isModern ? 'linear-gradient(135deg, #b45309, #d97706)' : 'transparent',
+        color: !isModern ? '#fff' : '#94a3b8',
+        border: 'none', cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700,
+        boxShadow: !isModern ? '0 2px 8px rgba(217,119,6,0.45)' : 'none',
+        transition: 'all 0.15s',
+      }}>
+        <FileText size={14} /> Classica
+      </button>
+    </div>
+  )
+}
+
 /* ── Section card ───────────────────────────────────────────── */
 function Section({ title, children }) {
   return (
@@ -330,27 +362,10 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
         </div>
 
         {/* Row 2: action buttons */}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', background: '#0d0f18', borderRadius: 6, padding: 2, border: '1px solid #252840' }}>
-            <button onClick={() => setViewPersist('moderna')} style={{
-              display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4,
-              background: view === 'moderna' ? '#1e1040' : 'transparent',
-              color: view === 'moderna' ? '#a78bfa' : '#64748b',
-              border: 'none', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600,
-            }}>
-              <Layers size={11} /> Moderna
-            </button>
-            <button onClick={() => setViewPersist('classica')} style={{
-              display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 4,
-              background: view === 'classica' ? '#1e1040' : 'transparent',
-              color: view === 'classica' ? '#a78bfa' : '#64748b',
-              border: 'none', cursor: 'pointer', fontSize: '0.72rem', fontWeight: 600,
-            }}>
-              <FileText size={11} /> Classica
-            </button>
-          </div>
-          <button onClick={() => setEditMode(v => !v)} style={{ ...editBadge, display: 'flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600, transition: 'all 0.15s' }}>
-            <Pencil size={12} /> {editMode ? 'Fine modifica' : 'Modifica scheda'}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', alignItems: 'center' }}>
+          <ViewToggle view={view} onChange={setViewPersist} />
+          <button onClick={() => setEditMode(v => !v)} style={{ ...editBadge, display: 'flex', alignItems: 'center', gap: 5, padding: '6px 12px', borderRadius: 8, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600, transition: 'all 0.15s' }}>
+            <Pencil size={13} /> {editMode ? 'Fine modifica' : 'Modifica scheda'}
           </button>
           {isDM && onDelete && <button className="btn btn-danger btn-sm" onClick={onDelete}><Trash2 size={13} /> Elimina</button>}
         </div>

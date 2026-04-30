@@ -16,10 +16,12 @@ export default function Sidebar({ onClose }) {
 
   return (
     <aside style={{
-      width: 220, minWidth: 220, height: '100vh',
+      width: 220, minWidth: 220, height: '100dvh',
       background: '#111420', borderRight: '1px solid #1e2235',
       display: 'flex', flexDirection: 'column',
-      padding: '1rem 0.75rem',
+      padding: 'calc(1rem + env(safe-area-inset-top)) 0.75rem calc(1rem + env(safe-area-inset-bottom))',
+      overflowY: 'auto',
+      WebkitOverflowScrolling: 'touch',
     }}>
       {/* Logo + close button */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.25rem 0.5rem', marginBottom: '1.5rem' }}>
