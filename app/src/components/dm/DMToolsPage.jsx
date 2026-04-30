@@ -5,6 +5,7 @@ import { ITEMS, ITEMS_BY_RARITY, findItem } from '../../data/items_it'
 import { CLASSI_INCANTATORI, getSpellClasses } from '../../data/spell_classes'
 import { getAllSpells, lookupSpell, lookupTrait } from '../../lib/srd'
 import { supabase } from '../../lib/supabase'
+import DiceWidget from './DiceWidget'
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)] }
@@ -1141,8 +1142,13 @@ export default function DMToolsPage() {
 
   return (
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 6rem)', overflow: 'hidden' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#f1f5f9' }}>Strumenti DM</h1>
+      </div>
+
+      {/* Dice widget — always visible at top */}
+      <div style={{ marginBottom: '0.875rem', flexShrink: 0 }}>
+        <DiceWidget />
       </div>
 
       <div style={{ display: 'flex', gap: 4, marginBottom: '1rem', flexShrink: 0, flexWrap: 'wrap' }}>

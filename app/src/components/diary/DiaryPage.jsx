@@ -34,6 +34,42 @@ function formatShortDate(iso) {
   return d.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+// ── Metadata embedded in content (works without DB migration) ────
+// content format on disk:
+//   <!--lt:meta:{...json...}-->
+//   <text>
+const META_RE = /^<!--lt:meta:(.*?)-->\n?/s
+
+function parseEntry(raw) {
+  const e = { ...raw, images: raw.images || [], event_date: raw.event_date || null, sort_order: raw.sort_order ?? null }
+  const c = raw.content || ''
+  const m = c.match(META_RE)
+  if (m) {
+    try {
+      const meta = JSON.parse(m[1])
+      e._text = c.slice(m[0].length)
+      // Prefer DB column if present, fall back to embedded meta
+      if (!e.event_date && meta.event_date) e.event_date = meta.event_date
+      if ((!e.images || e.images.length === 0) && Array.isArray(meta.images)) e.images = meta.images
+      if (e.sort_order == null && typeof meta.sort_order === 'number') e.sort_order = meta.sort_order
+    } catch {
+      e._text = c
+    }
+  } else {
+    e._text = c
+  }
+  return e
+}
+
+function serializeContent(text, meta) {
+  const clean = {}
+  if (meta.event_date) clean.event_date = meta.event_date
+  if (Array.isArray(meta.images) && meta.images.length > 0) clean.images = meta.images
+  if (typeof meta.sort_order === 'number') clean.sort_order = meta.sort_order
+  if (Object.keys(clean).length === 0) return text || ''
+  return `<!--lt:meta:${JSON.stringify(clean)}-->\n${text || ''}`
+}
+
 export default function DiaryPage() {
   const { isDM } = useAuth()
   const isMobile = useIsMobile()
@@ -45,7 +81,6 @@ export default function DiaryPage() {
   const [editing, setEditing] = useState(false)
   const [editForm, setEditForm] = useState({ title: '', content: '', type: 'nota', event_date: todayIso(), images: [] })
   const [uploadingImage, setUploadingImage] = useState(false)
-  // true once we confirm new columns exist in DB
   const [hasNewSchema, setHasNewSchema] = useState(false)
 
   useEffect(() => {
@@ -58,7 +93,6 @@ export default function DiaryPage() {
   }, [])
 
   async function loadEntries() {
-    // Always order by created_at — safe regardless of schema version
     const { data, error } = await supabase
       .from('diary_entries')
       .select('*')
@@ -71,19 +105,10 @@ export default function DiaryPage() {
     }
 
     if (data) {
-      const normalized = data.map(e => ({
-        ...e,
-        images: e.images || [],
-        event_date: e.event_date || null,
-        sort_order: e.sort_order ?? null,
-      }))
-
-      // Detect if migration has run (sort_order column present in at least one row or schema)
-      const migrated = data.length === 0
-        ? false
-        : Object.prototype.hasOwnProperty.call(data[0], 'sort_order')
+      const normalized = data.map(parseEntry)
+      // Detect schema once, just to use native columns when available
+      const migrated = data.length > 0 && Object.prototype.hasOwnProperty.call(data[0], 'sort_order')
       setHasNewSchema(migrated)
-      if (migrated) setSortMode('manual')
 
       setEntries(normalized)
       if (selected) {
@@ -95,45 +120,49 @@ export default function DiaryPage() {
   }
 
   async function createEntry() {
-    const baseInsert = { title: 'Nuova Voce', content: '', type: 'nota' }
+    const today = todayIso()
+    const minOrder = entries.length > 0 ? Math.min(...entries.map(e => e.sort_order ?? 0)) : 0
+    const newOrder = minOrder - 1
+    const initialContent = serializeContent('', { event_date: today, sort_order: newOrder })
+
+    const baseInsert = { title: 'Nuova Voce', content: initialContent, type: 'nota' }
     const fullInsert = hasNewSchema
-      ? { ...baseInsert, event_date: todayIso(), sort_order: (entries.length > 0 ? Math.min(...entries.map(e => e.sort_order ?? 0)) - 1 : 0), images: [] }
+      ? { ...baseInsert, event_date: today, sort_order: newOrder, images: [] }
       : baseInsert
 
-    const { data, error } = await supabase
-      .from('diary_entries')
-      .insert(fullInsert)
-      .select()
-      .single()
-
-    if (error || !data) {
-      // Fallback: try base insert only
-      const { data: fallback } = await supabase
-        .from('diary_entries')
-        .insert(baseInsert)
-        .select()
-        .single()
-      if (!fallback) return
-      const entry = { ...fallback, images: [], event_date: null, sort_order: null }
-      setEntries(prev => [entry, ...prev])
-      setSelected(entry)
-      setEditForm({ title: entry.title, content: entry.content || '', type: entry.type, event_date: todayIso(), images: [] })
-      setEditing(true)
-      return
+    let { data } = await supabase.from('diary_entries').insert(fullInsert).select().single()
+    if (!data) {
+      const fallback = await supabase.from('diary_entries').insert(baseInsert).select().single()
+      data = fallback.data
     }
+    if (!data) return
 
-    const entry = { ...data, images: data.images || [], event_date: data.event_date || null }
+    const entry = parseEntry(data)
     setEntries(prev => [entry, ...prev])
     setSelected(entry)
-    setEditForm({ title: entry.title, content: entry.content || '', type: entry.type, event_date: entry.event_date || todayIso(), images: entry.images })
+    setEditForm({
+      title: entry.title,
+      content: entry._text || '',
+      type: entry.type,
+      event_date: entry.event_date || today,
+      images: entry.images,
+    })
     setEditing(true)
   }
 
   async function saveEntry() {
     if (!selected) return
+    const text = editForm.content || ''
+    const meta = {
+      event_date: editForm.event_date || null,
+      images: editForm.images || [],
+      sort_order: selected.sort_order ?? 0,
+    }
+    const newContent = serializeContent(text, meta)
+
     const baseUpdates = {
       title: editForm.title.trim() || 'Senza titolo',
-      content: editForm.content,
+      content: newContent,
       type: editForm.type,
       updated_at: new Date().toISOString(),
     }
@@ -141,14 +170,12 @@ export default function DiaryPage() {
       ? { ...baseUpdates, event_date: editForm.event_date || null, images: editForm.images || [] }
       : baseUpdates
 
-    const { error } = await supabase.from('diary_entries').update(fullUpdates).eq('id', selected.id)
-
+    let { error } = await supabase.from('diary_entries').update(fullUpdates).eq('id', selected.id)
     if (error && hasNewSchema) {
-      // Retry without new columns
       await supabase.from('diary_entries').update(baseUpdates).eq('id', selected.id)
     }
 
-    const updated = { ...selected, ...fullUpdates }
+    const updated = parseEntry({ ...selected, ...fullUpdates })
     setEntries(prev => prev.map(e => e.id === selected.id ? updated : e))
     setSelected(updated)
     setEditing(false)
@@ -164,7 +191,7 @@ export default function DiaryPage() {
   function startEdit(entry) {
     setEditForm({
       title: entry.title,
-      content: entry.content || '',
+      content: entry._text || '',
       type: entry.type,
       event_date: entry.event_date || todayIso(),
       images: entry.images || [],
@@ -189,7 +216,6 @@ export default function DiaryPage() {
   }
 
   async function moveEntry(entry, dir) {
-    if (!hasNewSchema) return
     const list = sortedEntries
     const idx = list.findIndex(e => e.id === entry.id)
     const targetIdx = idx + dir
@@ -197,14 +223,31 @@ export default function DiaryPage() {
     const other = list[targetIdx]
     const a = entry.sort_order ?? idx
     const b = other.sort_order ?? targetIdx
+
+    const updateOne = async (e, newOrder) => {
+      const updated = parseEntry({ ...e, sort_order: newOrder })
+      const newContent = serializeContent(updated._text || '', {
+        event_date: updated.event_date,
+        images: updated.images,
+        sort_order: newOrder,
+      })
+      const baseUpd = { content: newContent, updated_at: new Date().toISOString() }
+      const fullUpd = hasNewSchema ? { ...baseUpd, sort_order: newOrder } : baseUpd
+      const { error } = await supabase.from('diary_entries').update(fullUpd).eq('id', e.id)
+      if (error && hasNewSchema) {
+        await supabase.from('diary_entries').update(baseUpd).eq('id', e.id)
+      }
+    }
+
     setEntries(prev => prev.map(e => {
       if (e.id === entry.id) return { ...e, sort_order: b }
       if (e.id === other.id) return { ...e, sort_order: a }
       return e
     }))
+
     await Promise.all([
-      supabase.from('diary_entries').update({ sort_order: b }).eq('id', entry.id),
-      supabase.from('diary_entries').update({ sort_order: a }).eq('id', other.id),
+      updateOne(entry, b),
+      updateOne(other, a),
     ])
   }
 
@@ -215,16 +258,15 @@ export default function DiaryPage() {
 
   const sortedEntries = useMemo(() => {
     const arr = [...filtered]
-    if (sortMode === 'manual' && hasNewSchema) {
+    if (sortMode === 'manual') {
       arr.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
     } else if (sortMode === 'event_asc') {
       arr.sort((a, b) => (a.event_date || a.created_at || '').localeCompare(b.event_date || b.created_at || ''))
     } else {
-      // date_desc (default)
       arr.sort((a, b) => (b.event_date || b.created_at || '').localeCompare(a.event_date || a.created_at || ''))
     }
     return arr
-  }, [filtered, sortMode, hasNewSchema])
+  }, [filtered, sortMode])
 
   if (loading) return <div style={{ color: '#64748b', padding: '2rem' }}>Caricamento diario…</div>
 
@@ -244,19 +286,17 @@ export default function DiaryPage() {
           </button>
         </div>
 
-        {/* Sort selector */}
         <select
           className="select"
           value={sortMode}
           onChange={e => setSortMode(e.target.value)}
           style={{ fontSize: '0.78rem', padding: '0.35rem 0.6rem' }}
         >
-          {hasNewSchema && <option value="manual">Ordine manuale</option>}
+          <option value="manual">Ordine manuale</option>
           <option value="date_desc">Recenti prima</option>
           <option value="event_asc">Cronologico</option>
         </select>
 
-        {/* Type filters */}
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
           <button onClick={() => setFilter('all')} style={{
             padding: '3px 10px', borderRadius: 999, fontSize: '0.7rem', fontWeight: 600,
@@ -274,7 +314,6 @@ export default function DiaryPage() {
           ))}
         </div>
 
-        {/* Entries */}
         <div style={{ flex: 1, minHeight: 0, overflow: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', gap: 4 }}>
           {sortedEntries.length === 0 && (
             <p style={{ color: '#475569', fontSize: '0.8rem', fontStyle: 'italic', padding: '1rem 0' }}>
@@ -285,7 +324,7 @@ export default function DiaryPage() {
             const type = getType(entry.type)
             const Icon = type.icon
             const isSelected = selected?.id === entry.id
-            const canMove = sortMode === 'manual' && hasNewSchema
+            const canMove = sortMode === 'manual'
             const dateLabel = formatShortDate(entry.event_date) ||
               new Date(entry.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' })
             return (
@@ -308,9 +347,9 @@ export default function DiaryPage() {
                         <span style={{ marginLeft: 4, color: '#94a3b8', fontSize: '0.65rem' }}>📷 {entry.images.length}</span>
                       )}
                     </div>
-                    {entry.content && (
+                    {entry._text && (
                       <div style={{ fontSize: '0.75rem', color: '#475569', marginTop: 4, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                        {entry.content}
+                        {entry._text}
                       </div>
                     )}
                   </div>
@@ -359,52 +398,48 @@ export default function DiaryPage() {
               </select>
             </div>
 
-            {/* Date (only if schema supports it) */}
-            {hasNewSchema && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <label style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <Calendar size={12} /> Data dell'evento
-                </label>
-                <input
-                  className="input"
-                  type="date"
-                  value={editForm.event_date || ''}
-                  onChange={e => setEditForm(p => ({ ...p, event_date: e.target.value }))}
-                  style={{ width: 180 }}
-                />
-                <span style={{ fontSize: '0.7rem', color: '#475569', fontStyle: 'italic' }}>Puoi inserire date passate.</span>
-              </div>
-            )}
+            {/* Date */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <label style={{ fontSize: '0.72rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Calendar size={12} /> Data dell'evento
+              </label>
+              <input
+                className="input"
+                type="date"
+                value={editForm.event_date || ''}
+                onChange={e => setEditForm(p => ({ ...p, event_date: e.target.value }))}
+                style={{ width: 180 }}
+              />
+              <span style={{ fontSize: '0.7rem', color: '#475569', fontStyle: 'italic' }}>Anche date passate.</span>
+            </div>
 
-            {/* Images (only if schema supports it) */}
-            {hasNewSchema && (
-              <div>
-                <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  Immagini
-                  <label className="btn btn-secondary btn-sm" style={{ cursor: uploadingImage ? 'wait' : 'pointer' }}>
-                    {uploadingImage ? <Loader size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> : <ImagePlus size={12} />}
-                    {uploadingImage ? 'Caricamento…' : 'Aggiungi'}
-                    <input type="file" accept="image/*" style={{ display: 'none' }}
-                      onChange={e => { handleAddImage(e.target.files[0]); e.target.value = '' }}
-                      disabled={uploadingImage} />
-                  </label>
-                </div>
-                {(editForm.images || []).length > 0 ? (
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8 }}>
-                    {editForm.images.map((url, i) => (
-                      <div key={i} style={{ position: 'relative', aspectRatio: '1/1', borderRadius: 8, overflow: 'hidden', border: '1px solid #252840' }}>
-                        <img src={cloudinaryUrl(url, { width: 240, height: 240 })} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
-                        <button onClick={() => removeImage(i)} style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.7)', border: 'none', color: '#fff', borderRadius: 6, padding: 4, cursor: 'pointer', display: 'flex' }}>
-                          <X size={12} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p style={{ color: '#475569', fontSize: '0.75rem', fontStyle: 'italic', margin: 0 }}>Nessuna immagine allegata.</p>
-                )}
+            {/* Images */}
+            <div>
+              <div style={{ fontSize: '0.72rem', color: '#94a3b8', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                Immagini
+                <label className="btn btn-secondary btn-sm" style={{ cursor: uploadingImage ? 'wait' : 'pointer' }}>
+                  {uploadingImage ? <Loader size={12} style={{ animation: 'spin 0.8s linear infinite' }} /> : <ImagePlus size={12} />}
+                  {uploadingImage ? 'Caricamento…' : 'Aggiungi'}
+                  <input type="file" accept="image/*" style={{ display: 'none' }}
+                    onChange={e => { handleAddImage(e.target.files[0]); e.target.value = '' }}
+                    disabled={uploadingImage} />
+                </label>
               </div>
-            )}
+              {(editForm.images || []).length > 0 ? (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8 }}>
+                  {editForm.images.map((url, i) => (
+                    <div key={i} style={{ position: 'relative', aspectRatio: '1/1', borderRadius: 8, overflow: 'hidden', border: '1px solid #252840' }}>
+                      <img src={cloudinaryUrl(url, { width: 240, height: 240 })} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                      <button onClick={() => removeImage(i)} style={{ position: 'absolute', top: 4, right: 4, background: 'rgba(0,0,0,0.7)', border: 'none', color: '#fff', borderRadius: 6, padding: 4, cursor: 'pointer', display: 'flex' }}>
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ color: '#475569', fontSize: '0.75rem', fontStyle: 'italic', margin: 0 }}>Nessuna immagine allegata.</p>
+              )}
+            </div>
 
             <textarea
               className="textarea"
@@ -465,7 +500,6 @@ export default function DiaryPage() {
               </div>
             </div>
 
-            {/* Images */}
             {(selected.images || []).length > 0 && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 8, marginBottom: '1.25rem' }}>
                 {selected.images.map((url, i) => (
@@ -476,9 +510,9 @@ export default function DiaryPage() {
               </div>
             )}
 
-            {selected.content ? (
+            {selected._text ? (
               <div style={{ color: '#cbd5e1', fontSize: '0.9rem', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
-                {selected.content}
+                {selected._text}
               </div>
             ) : (
               <div style={{ color: '#475569', fontStyle: 'italic', fontSize: '0.875rem' }}>

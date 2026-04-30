@@ -3,7 +3,8 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { useIsMobile } from '../../hooks/useIsMobile'
 import { PRESET_MONSTERS, CONDITIONS } from '../../data/characters'
-import { Plus, SkipForward, Shield, X, Trash2, Dice6, ChevronUp, ChevronDown, Search } from 'lucide-react'
+import { Plus, SkipForward, Shield, X, Trash2, Dice6, ChevronUp, ChevronDown, Search, Bell, User } from 'lucide-react'
+import CharacterCombatPanel from './CharacterCombatPanel'
 
 const DICE = [4, 6, 8, 10, 12, 20, 100]
 
@@ -207,12 +208,50 @@ export default function CombatPage() {
 
   const participants = session.participants || []
   const current = participants[session.current_turn]
+  // Player's own character turn detection
+  const myParticipant = myCharacterId ? participants.find(p => p.char_id === myCharacterId) : null
+  const isMyTurn = !!myParticipant && current?.id === myParticipant.id
+
+  function appendToLog(text) {
+    const s = sessionRef.current
+    if (!s) return
+    const log = [{ ts: Date.now(), actor: myParticipant?.name || 'Giocatore', text }, ...(s.log || [])].slice(0, 50)
+    updateSession({ log })
+  }
 
   return (
     <div className="fade-in" style={{ display: 'flex', gap: '1rem', minHeight: 'calc(100dvh - 6rem)', overflow: 'hidden' }}>
 
       {/* Main combat area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.875rem', overflow: 'hidden' }}>
+
+        {/* Player turn alert */}
+        {isMyTurn && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            background: 'linear-gradient(90deg, #1e1040, #2a1a5c)',
+            border: '1px solid #7c3aed',
+            boxShadow: '0 0 20px rgba(124,58,237,0.35)',
+            borderRadius: 10, padding: '0.7rem 1rem', flexShrink: 0,
+            animation: 'pulse-hp 1.5s ease infinite',
+          }}>
+            <Bell size={18} color="#a78bfa" />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#a78bfa', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                È il tuo turno!
+              </div>
+              <div style={{ fontSize: '0.85rem', color: '#e2e8f0', marginTop: 2 }}>
+                Tocca a {myParticipant.name}. Scegli un'azione qui sotto.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Inline character action panel — visible to player on their turn */}
+        {isMyTurn && (
+          <CharacterCombatPanel characterId={myCharacterId} onResult={appendToLog} />
+        )}
+
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, flexWrap: 'wrap', gap: 8 }}>
@@ -566,11 +605,15 @@ function AddParticipantModal({ onAdd, onClose }) {
   const [characters, setCharacters] = useState([])
   const [monsterSearch, setMonsterSearch] = useState('')
   const [form, setForm] = useState({ name: '', hp_max: 10, ac: 10, initiative: 10, initiative_bonus: 0, is_enemy: false, color: '#7c3aed' })
+  const [diaryNpcs, setDiaryNpcs] = useState([])
+  const [diarySearch, setDiarySearch] = useState('')
 
   useEffect(() => {
     supabase.from('characters').select('*').then(({ data }) => {
       if (data?.length) setCharacters(data.map(r => r.data))
     })
+    supabase.from('diary_entries').select('*').eq('type', 'png').order('created_at', { ascending: false })
+      .then(({ data }) => { if (data) setDiaryNpcs(data) })
   }, [])
 
   function fromCharacter(char) {
@@ -601,6 +644,20 @@ function AddParticipantModal({ onAdd, onClose }) {
     })
   }
 
+  function fromDiaryNpc(npc, isEnemy) {
+    onAdd({
+      name: npc.title,
+      hp_max: 20,
+      hp_current: 20,
+      ac: 12,
+      initiative: rollDie(20),
+      initiative_bonus: 0,
+      is_enemy: isEnemy,
+      color: isEnemy ? '#ef4444' : '#0891b2',
+      diary_id: npc.id,
+    })
+  }
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal fade-in" onClick={e => e.stopPropagation()}>
@@ -609,14 +666,19 @@ function AddParticipantModal({ onAdd, onClose }) {
           <button className="btn-icon" onClick={onClose}><X size={18} /></button>
         </div>
 
-        <div style={{ display: 'flex', gap: 4, marginBottom: '1rem', background: '#0d0f18', borderRadius: 8, padding: 3 }}>
-          {['personaggio', 'mostro', 'manuale'].map(t => (
-            <button key={t} onClick={() => setTab(t)} style={{
+        <div style={{ display: 'flex', gap: 4, marginBottom: '1rem', background: '#0d0f18', borderRadius: 8, padding: 3, flexWrap: 'wrap' }}>
+          {[
+            { id: 'personaggio', label: 'PG' },
+            { id: 'mostro', label: 'Mostro' },
+            { id: 'png', label: 'PNG diario' },
+            { id: 'manuale', label: 'Manuale' },
+          ].map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)} style={{
               flex: 1, padding: '0.4rem', borderRadius: 6, border: 'none',
-              background: tab === t ? '#161929' : 'transparent',
-              color: tab === t ? '#f1f5f9' : '#64748b',
-              fontSize: '0.8rem', fontWeight: tab === t ? 600 : 400, cursor: 'pointer', textTransform: 'capitalize',
-            }}>{t}</button>
+              background: tab === t.id ? '#161929' : 'transparent',
+              color: tab === t.id ? '#f1f5f9' : '#64748b',
+              fontSize: '0.78rem', fontWeight: tab === t.id ? 600 : 400, cursor: 'pointer',
+            }}>{t.label}</button>
           ))}
         </div>
 
@@ -669,6 +731,49 @@ function AddParticipantModal({ onAdd, onClose }) {
                   </button>
                 ))}
             </div>
+          </>
+        )}
+
+        {tab === 'png' && (
+          <>
+            <div style={{ position: 'relative', marginBottom: 8 }}>
+              <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+              <input className="input" value={diarySearch} onChange={e => setDiarySearch(e.target.value)}
+                placeholder={`Cerca tra ${diaryNpcs.length} PNG nel diario…`}
+                style={{ paddingLeft: 32, width: '100%' }} />
+            </div>
+            {diaryNpcs.length === 0 ? (
+              <p style={{ color: '#475569', fontSize: '0.85rem', textAlign: 'center', padding: '1rem', fontStyle: 'italic' }}>
+                Nessun PNG nel diario. Crea voci di tipo "PNG" dal Diario.
+              </p>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: '50vh', overflow: 'auto' }}>
+                {diaryNpcs
+                  .filter(n => !diarySearch || n.title.toLowerCase().includes(diarySearch.toLowerCase()))
+                  .map(npc => (
+                    <div key={npc.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      background: '#0d0f18', border: '1px solid #252840', borderRadius: 8, padding: '0.6rem 0.75rem',
+                    }}>
+                      <div style={{ width: 30, height: 30, borderRadius: 8, background: '#082f49', border: '1px solid #0e4f6e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <User size={14} color="#0891b2" />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{npc.title}</div>
+                        <div style={{ fontSize: '0.68rem', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {(npc.content || '').replace(/^<!--.*?-->\n?/s, '').slice(0, 80) || '—'}
+                        </div>
+                      </div>
+                      <button className="btn btn-secondary btn-sm" onClick={() => fromDiaryNpc(npc, false)} title="Aggiungi come alleato">
+                        Alleato
+                      </button>
+                      <button className="btn btn-danger btn-sm" onClick={() => fromDiaryNpc(npc, true)} title="Aggiungi come nemico">
+                        Nemico
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            )}
           </>
         )}
 

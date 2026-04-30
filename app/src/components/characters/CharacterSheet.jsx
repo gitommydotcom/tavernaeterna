@@ -265,8 +265,36 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
   // ── Edit helpers ──────────────────────────────────────────
   function removeEquipment(i) { onUpdate({ equipment: c.equipment.filter((_, idx) => idx !== i) }) }
   function addEquipment(v) { onUpdate({ equipment: [...(c.equipment || []), v] }) }
+  function updateEquipment(i, v) {
+    const next = [...(c.equipment || [])]
+    if (v.trim()) next[i] = v
+    else next.splice(i, 1)
+    onUpdate({ equipment: next })
+  }
   function removeTrait(i) { onUpdate({ traits: c.traits.filter((_, idx) => idx !== i) }) }
   function addTrait(v) { onUpdate({ traits: [...(c.traits || []), v] }) }
+  function updateTrait(i, v) {
+    const next = [...(c.traits || [])]
+    if (v.trim()) next[i] = v
+    else next.splice(i, 1)
+    onUpdate({ traits: next })
+  }
+  function updateCantrip(i, v) {
+    const next = [...(c.spells?.cantrips || [])]
+    if (v.trim()) next[i] = v
+    else next.splice(i, 1)
+    onUpdate({ spells: { ...c.spells, cantrips: next } })
+  }
+  function updateSpell(i, vals) {
+    const list = [...(c.spells?.spells || [])]
+    list[i] = { ...list[i], ...vals, name: vals.name?.trim() ?? list[i].name, level: vals.level != null ? parseInt(vals.level) || 0 : list[i].level }
+    onUpdate({ spells: { ...c.spells, spells: list } })
+  }
+  function updateAttack(i, vals) {
+    const list = [...(c.attacks || [])]
+    list[i] = { ...list[i], ...vals }
+    onUpdate({ attacks: list })
+  }
   function removeCantrip(i) { onUpdate({ spells: { ...c.spells, cantrips: c.spells.cantrips.filter((_, idx) => idx !== i) } }) }
   function addCantrip(v) { onUpdate({ spells: { ...c.spells, cantrips: [...(c.spells?.cantrips || []), v] } }) }
   function removeSpell(i) { onUpdate({ spells: { ...c.spells, spells: c.spells.spells.filter((_, idx) => idx !== i) } }) }
@@ -319,44 +347,47 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
   return (
     <div className="fade-in" style={{ maxWidth: 900, margin: '0 auto' }}>
       {/* Header */}
-      <div style={{ marginBottom: '1.25rem' }}>
-        {/* Row 1: back + avatar + name */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-          <button className="btn-icon" onClick={onBack}><ArrowLeft size={18} /></button>
+      <div style={{ marginBottom: '1.5rem' }}>
+        {/* Back button */}
+        <div style={{ marginBottom: 12 }}>
+          <button className="btn-icon" onClick={onBack}><ArrowLeft size={20} /></button>
+        </div>
 
-          {/* Avatar */}
+        {/* Row 1: avatar + name (large) */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginBottom: 10, flexWrap: 'wrap' }}>
+          {/* Avatar — bigger */}
           <div style={{ position: 'relative', flexShrink: 0 }}>
             {c.avatar_url
-              ? <img src={c.avatar_url} alt={c.name} style={{ width: 72, height: 72, borderRadius: 14, objectFit: 'cover', border: `2px solid ${c.color}55` }} />
-              : <div style={{ width: 72, height: 72, borderRadius: 14, background: `linear-gradient(135deg, ${c.color}cc, ${c.color}66)`, border: `2px solid ${c.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', fontWeight: 700, color: '#fff' }}>{c.initials || c.name.slice(0, 2).toUpperCase()}</div>
+              ? <img src={c.avatar_url} alt={c.name} style={{ width: 128, height: 128, borderRadius: 18, objectFit: 'cover', border: `3px solid ${c.color}66`, boxShadow: `0 6px 24px ${c.color}33` }} />
+              : <div style={{ width: 128, height: 128, borderRadius: 18, background: `linear-gradient(135deg, ${c.color}cc, ${c.color}66)`, border: `3px solid ${c.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.4rem', fontWeight: 700, color: '#fff', boxShadow: `0 6px 24px ${c.color}33` }}>{c.initials || c.name.slice(0, 2).toUpperCase()}</div>
             }
-            <label style={{ position: 'absolute', inset: 0, borderRadius: 14, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: 0, transition: 'opacity 0.15s' }}
+            <label style={{ position: 'absolute', inset: 0, borderRadius: 18, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: 0, transition: 'opacity 0.15s' }}
               onMouseEnter={e => e.currentTarget.style.opacity = 1} onMouseLeave={e => e.currentTarget.style.opacity = 0}>
-              {uploadingAvatar ? <Loader size={18} color="#fff" style={{ animation: 'spin 0.8s linear infinite' }} /> : <Upload size={18} color="#fff" />}
+              {uploadingAvatar ? <Loader size={26} color="#fff" style={{ animation: 'spin 0.8s linear infinite' }} /> : <Upload size={26} color="#fff" />}
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={e => handleAvatarUpload(e.target.files[0])} disabled={uploadingAvatar} />
             </label>
           </div>
 
           {editMode ? (
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 5 }}>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
               <input className="input" defaultValue={c.name}
                 onBlur={e => { const v = e.target.value.trim(); if (v) onUpdate({ name: v, initials: v.slice(0, 2).toUpperCase() }) }}
-                style={{ fontSize: '0.95rem', fontWeight: 700, padding: '0.25rem 0.5rem' }} placeholder="Nome personaggio" />
+                style={{ fontSize: '1.6rem', fontWeight: 800, padding: '0.4rem 0.6rem' }} placeholder="Nome personaggio" />
               <input className="input" defaultValue={c.player_name || ''}
                 onBlur={e => onUpdate({ player_name: e.target.value.trim() })}
-                style={{ fontSize: '0.78rem', padding: '0.2rem 0.5rem' }} placeholder="Nome del giocatore" />
+                style={{ fontSize: '0.85rem', padding: '0.25rem 0.5rem' }} placeholder="Nome del giocatore" />
               <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                <input className="input" defaultValue={c.race} onBlur={e => onUpdate({ race: e.target.value })} style={{ width: 80, fontSize: '0.72rem', padding: '0.2rem 0.4rem' }} placeholder="Razza" />
-                <input className="input" defaultValue={c.class} onBlur={e => onUpdate({ class: e.target.value })} style={{ width: 85, fontSize: '0.72rem', padding: '0.2rem 0.4rem' }} placeholder="Classe" />
-                <input className="input" defaultValue={c.alignment || ''} onBlur={e => onUpdate({ alignment: e.target.value })} style={{ width: 120, fontSize: '0.72rem', padding: '0.2rem 0.4rem' }} placeholder="Allineamento" />
-                <input className="input" type="number" min={1} max={20} defaultValue={c.level} onBlur={e => onUpdate({ level: parseInt(e.target.value) || 1 })} style={{ width: 50, fontSize: '0.72rem', padding: '0.2rem 0.4rem' }} placeholder="Liv." />
+                <input className="input" defaultValue={c.race} onBlur={e => onUpdate({ race: e.target.value })} style={{ width: 90, fontSize: '0.75rem', padding: '0.25rem 0.5rem' }} placeholder="Razza" />
+                <input className="input" defaultValue={c.class} onBlur={e => onUpdate({ class: e.target.value })} style={{ width: 95, fontSize: '0.75rem', padding: '0.25rem 0.5rem' }} placeholder="Classe" />
+                <input className="input" defaultValue={c.alignment || ''} onBlur={e => onUpdate({ alignment: e.target.value })} style={{ width: 130, fontSize: '0.75rem', padding: '0.25rem 0.5rem' }} placeholder="Allineamento" />
+                <input className="input" type="number" min={1} max={20} defaultValue={c.level} onBlur={e => onUpdate({ level: parseInt(e.target.value) || 1 })} style={{ width: 55, fontSize: '0.75rem', padding: '0.25rem 0.5rem' }} placeholder="Liv." />
               </div>
             </div>
           ) : (
             <div style={{ flex: 1, minWidth: 0 }}>
-              <h1 style={{ margin: 0, fontSize: 'clamp(1.1rem, 3vw, 1.4rem)', fontWeight: 700, color: '#f1f5f9' }}>{c.name}</h1>
-              <p style={{ margin: 0, color: '#94a3b8', fontSize: '0.85rem', marginTop: 2 }}>{c.race} · {c.class} {c.level}{c.alignment ? ` · ${c.alignment}` : ''}</p>
-              {c.player_name && <p style={{ margin: '2px 0 0', color: '#64748b', fontSize: '0.72rem', fontStyle: 'italic' }}>Giocato da {c.player_name}</p>}
+              <h1 style={{ margin: 0, fontSize: 'clamp(1.7rem, 5vw, 2.6rem)', fontWeight: 800, color: '#f1f5f9', letterSpacing: '-0.015em', lineHeight: 1.05 }}>{c.name}</h1>
+              <p style={{ margin: '6px 0 0', color: '#a78bfa', fontSize: 'clamp(0.95rem, 2vw, 1.05rem)', fontWeight: 500 }}>{c.race} · {c.class} {c.level}{c.alignment ? ` · ${c.alignment}` : ''}</p>
+              {c.player_name && <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.8rem', fontStyle: 'italic' }}>Giocato da {c.player_name}</p>}
             </div>
           )}
         </div>
@@ -554,11 +585,20 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
                     </div>
                   )}
                   {c.attacks.map((a, i) => editMode ? (
-                    <div key={i} style={{ display: 'flex', gap: 4, alignItems: 'center', background: '#0d0f18', borderRadius: 6, padding: '4px 8px' }}>
-                      <span style={{ flex: 2, fontSize: '0.8rem', color: '#f1f5f9' }}>{a.name}</span>
-                      <span style={{ fontSize: '0.75rem', color: '#22c55e', width: 45 }}>{a.bonus}</span>
-                      <span style={{ fontSize: '0.75rem', color: '#f59e0b', width: 55 }}>{a.damage}</span>
-                      <button className="btn-icon" style={{ padding: 2 }} onClick={() => removeAttack(i)}><X size={12} color="#ef4444" /></button>
+                    <div key={i} style={{ display: 'flex', gap: 4, alignItems: 'center', background: '#0d0f18', borderRadius: 6, padding: '4px 6px' }}>
+                      <input className="input" defaultValue={a.name}
+                        onBlur={e => { if (e.target.value !== a.name) updateAttack(i, { name: e.target.value }) }}
+                        style={{ flex: 2, fontSize: '0.8rem', padding: '0.2rem 0.4rem', minWidth: 80 }} placeholder="Nome" />
+                      <input className="input" defaultValue={a.bonus}
+                        onBlur={e => { if (e.target.value !== a.bonus) updateAttack(i, { bonus: e.target.value }) }}
+                        style={{ width: 50, fontSize: '0.75rem', padding: '0.2rem 0.3rem', textAlign: 'center', color: '#22c55e' }} placeholder="+0" />
+                      <input className="input" defaultValue={a.damage}
+                        onBlur={e => { if (e.target.value !== a.damage) updateAttack(i, { damage: e.target.value }) }}
+                        style={{ width: 70, fontSize: '0.75rem', padding: '0.2rem 0.3rem', textAlign: 'center', color: '#f59e0b' }} placeholder="1d6" />
+                      <input className="input" defaultValue={a.type || ''}
+                        onBlur={e => { if (e.target.value !== a.type) updateAttack(i, { type: e.target.value }) }}
+                        style={{ width: 60, fontSize: '0.7rem', padding: '0.2rem 0.3rem' }} placeholder="Tipo" />
+                      <button className="btn-icon" style={{ padding: 2 }} title="Elimina" onClick={() => removeAttack(i)}><X size={12} color="#ef4444" /></button>
                     </div>
                   ) : (
                     <Clickable key={i} item={{ ...a, kind: 'attack' }} onSelect={setSelectedItem}>
@@ -661,8 +701,10 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
                       <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: 6, fontWeight: 600 }}>TRUCCHETTI</div>
                       {c.spells.cantrips?.map((s, i) => editMode ? (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                          <span style={{ flex: 1, fontSize: '0.8rem', color: '#cbd5e1' }}>{s}</span>
-                          <button className="btn-icon" style={{ padding: 2 }} onClick={() => removeCantrip(i)}><X size={12} color="#ef4444" /></button>
+                          <input className="input" defaultValue={s}
+                            onBlur={e => { if (e.target.value !== s) updateCantrip(i, e.target.value) }}
+                            style={{ flex: 1, fontSize: '0.8rem', padding: '0.25rem 0.5rem' }} />
+                          <button className="btn-icon" style={{ padding: 2 }} title="Elimina" onClick={() => removeCantrip(i)}><X size={12} color="#ef4444" /></button>
                         </div>
                       ) : (
                         <Clickable key={i} item={{ name: s, kind: 'spell' }} onSelect={setSelectedItem} style={{ marginBottom: 3 }}>
@@ -685,8 +727,10 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
                         <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: 4, fontWeight: 600 }}>LIVELLO {lv}</div>
                         {lvSpells.map((s, i) => editMode ? (
                           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                            <span style={{ flex: 1, fontSize: '0.8rem', color: '#cbd5e1' }}>{s.name}</span>
-                            <button className="btn-icon" style={{ padding: 2 }} onClick={() => removeSpell(c.spells.spells.indexOf(s))}><X size={12} color="#ef4444" /></button>
+                            <input className="input" defaultValue={s.name}
+                              onBlur={e => { if (e.target.value !== s.name) updateSpell(c.spells.spells.indexOf(s), { name: e.target.value }) }}
+                              style={{ flex: 1, fontSize: '0.8rem', padding: '0.25rem 0.5rem' }} />
+                            <button className="btn-icon" style={{ padding: 2 }} title="Elimina" onClick={() => removeSpell(c.spells.spells.indexOf(s))}><X size={12} color="#ef4444" /></button>
                           </div>
                         ) : (
                           <Clickable key={i} item={{ ...s, kind: 'spell' }} onSelect={setSelectedItem} style={{ marginBottom: 3 }}>
@@ -721,8 +765,13 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
                 {c.equipment?.map((item, i) => editMode ? (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ color: '#d97706', fontSize: '0.7rem' }}>◆</span>
-                    <span style={{ fontSize: '0.8rem', color: '#cbd5e1', flex: 1 }}>{item}</span>
-                    <button className="btn-icon" style={{ padding: 2 }} onClick={() => removeEquipment(i)}><X size={12} color="#ef4444" /></button>
+                    <input
+                      className="input"
+                      defaultValue={item}
+                      onBlur={e => { if (e.target.value !== item) updateEquipment(i, e.target.value) }}
+                      style={{ flex: 1, fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
+                    />
+                    <button className="btn-icon" style={{ padding: 2 }} title="Elimina" onClick={() => removeEquipment(i)}><X size={12} color="#ef4444" /></button>
                   </div>
                 ) : (
                   <Clickable key={i} item={{ name: item, kind: 'equipment', text: item }} onSelect={setSelectedItem}>
@@ -741,8 +790,13 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
               <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 {c.traits?.map((t, i) => editMode ? (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ fontSize: '0.8rem', color: '#a78bfa', flex: 1 }}>{t}</span>
-                    <button className="btn-icon" style={{ padding: 2 }} onClick={() => removeTrait(i)}><X size={12} color="#ef4444" /></button>
+                    <input
+                      className="input"
+                      defaultValue={t}
+                      onBlur={e => { if (e.target.value !== t) updateTrait(i, e.target.value) }}
+                      style={{ flex: 1, fontSize: '0.8rem', padding: '0.25rem 0.5rem', color: '#a78bfa' }}
+                    />
+                    <button className="btn-icon" style={{ padding: 2 }} title="Elimina" onClick={() => removeTrait(i)}><X size={12} color="#ef4444" /></button>
                   </div>
                 ) : (
                   <Clickable key={i} item={{ name: t, kind: 'trait', text: t }} onSelect={setSelectedItem}>
