@@ -23,12 +23,18 @@ export function useAuth() {
   }, [])
 
   async function fetchProfile(userId) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    setProfile(data)
+    const [{ data: profileData }, { data: charsData }] = await Promise.all([
+      supabase.from('profiles').select('*').eq('id', userId).single(),
+      supabase.from('characters').select('id, data'),
+    ])
+
+    // Cerca il personaggio assegnato tramite assigned_profile_id (scritto dal DM
+    // nella tabella characters, che non ha restrizioni RLS per owner-only).
+    // Fallback a profiles.character_id per retrocompatibilità.
+    const assignedChar = charsData?.find(c => c.data?.assigned_profile_id === userId)
+    const character_id = assignedChar?.id || profileData?.character_id || null
+
+    setProfile(profileData ? { ...profileData, character_id } : null)
     setLoading(false)
   }
 

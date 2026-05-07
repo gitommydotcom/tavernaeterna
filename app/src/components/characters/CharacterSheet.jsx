@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   statModStr, STAT_LABELS,
   SAVES_LIST, SKILLS_LIST,
@@ -207,6 +207,25 @@ function AddRow({ placeholder, onAdd, fields }) {
   )
 }
 
+/* ── EditInput controllato — salva su blur E su Enter (mobile-friendly) ────── */
+function EditInput({ value, onSave, style, className, placeholder }) {
+  const [local, setLocal] = useState(value)
+  const savedRef = useRef(value)
+  useEffect(() => { savedRef.current = value; setLocal(value) }, [value])
+  function save() { if (local !== savedRef.current) onSave(local) }
+  return (
+    <input
+      className={className || 'input'}
+      value={local}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={save}
+      onKeyDown={e => { if (e.key === 'Enter') { save(); e.target.blur() } }}
+      style={style}
+      placeholder={placeholder}
+    />
+  )
+}
+
 /* ════════════════════════════════════════════════════════════
    MAIN COMPONENT
 ════════════════════════════════════════════════════════════ */
@@ -214,6 +233,8 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
   const [editingHP, setEditingHP] = useState(false)
   const [hpInput, setHpInput] = useState('')
   const [hpDelta, setHpDelta] = useState('')
+  const [editingHpMax, setEditingHpMax] = useState(false)
+  const [hpMaxInput, setHpMaxInput] = useState(String(c.hp_max ?? 0))
   const [editingNotes, setEditingNotes] = useState(false)
   const [notesInput, setNotesInput] = useState(c.notes || '')
   const [spellSlots, setSpellSlots] = useState(c.spells?.slots_used || {})
@@ -424,12 +445,21 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
               ) : (
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
                   <span style={{ fontSize: '2rem', fontWeight: 800, color: hpColor, lineHeight: 1 }}>{c.hp_current}</span>
-                  {editMode ? (
-                    <span style={{ color: '#64748b', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: 3 }}>
-                      / <input type="number" defaultValue={c.hp_max} onBlur={e => { const v = parseInt(e.target.value); if (v > 0) onUpdate({ hp_max: v }) }} style={{ width: 48, background: 'transparent', border: 'none', borderBottom: '1px solid #3730a3', color: '#94a3b8', fontSize: '0.85rem', fontWeight: 700, textAlign: 'center', outline: 'none', padding: '0 2px' }} /> Max
-                    </span>
+                  {editMode && editingHpMax ? (
+                    <form onSubmit={e => { e.preventDefault(); const v = parseInt(hpMaxInput); if (v > 0) { onUpdate({ hp_max: v }); setEditingHpMax(false) } }} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <span style={{ color: '#64748b', fontSize: '0.85rem' }}>/</span>
+                      <input type="number" className="input" value={hpMaxInput} onChange={e => setHpMaxInput(e.target.value)} onKeyDown={e => e.key === 'Escape' && setEditingHpMax(false)} autoFocus style={{ width: 64, fontSize: '0.9rem', fontWeight: 700, padding: '0.15rem 0.4rem', textAlign: 'center' }} />
+                      <button type="submit" className="btn-icon"><Check size={14} /></button>
+                      <button type="button" className="btn-icon" onClick={() => setEditingHpMax(false)}><X size={14} /></button>
+                    </form>
                   ) : (
-                    <span style={{ color: '#64748b', fontSize: '1rem' }}>/ {c.hp_max}</span>
+                    <span
+                      style={{ color: '#64748b', fontSize: '1rem', cursor: editMode ? 'pointer' : 'default', padding: editMode ? '2px 6px' : 0, borderRadius: 4, border: editMode ? '1px dashed #3730a3' : 'none' }}
+                      onClick={() => { if (editMode) { setHpMaxInput(String(c.hp_max)); setEditingHpMax(true) } }}
+                      title={editMode ? 'Clicca per modificare i PF massimi' : ''}
+                    >
+                      / {c.hp_max}{editMode && <span style={{ fontSize: '0.65rem', color: '#7c3aed', marginLeft: 3 }}>Max ✎</span>}
+                    </span>
                   )}
                 </div>
               )}
@@ -586,17 +616,13 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
                   )}
                   {c.attacks.map((a, i) => editMode ? (
                     <div key={i} style={{ display: 'flex', gap: 4, alignItems: 'center', background: '#0d0f18', borderRadius: 6, padding: '4px 6px' }}>
-                      <input className="input" defaultValue={a.name}
-                        onBlur={e => { if (e.target.value !== a.name) updateAttack(i, { name: e.target.value }) }}
+                      <EditInput value={a.name} onSave={v => updateAttack(i, { name: v })}
                         style={{ flex: 2, fontSize: '0.8rem', padding: '0.2rem 0.4rem', minWidth: 80 }} placeholder="Nome" />
-                      <input className="input" defaultValue={a.bonus}
-                        onBlur={e => { if (e.target.value !== a.bonus) updateAttack(i, { bonus: e.target.value }) }}
+                      <EditInput value={a.bonus} onSave={v => updateAttack(i, { bonus: v })}
                         style={{ width: 50, fontSize: '0.75rem', padding: '0.2rem 0.3rem', textAlign: 'center', color: '#22c55e' }} placeholder="+0" />
-                      <input className="input" defaultValue={a.damage}
-                        onBlur={e => { if (e.target.value !== a.damage) updateAttack(i, { damage: e.target.value }) }}
+                      <EditInput value={a.damage} onSave={v => updateAttack(i, { damage: v })}
                         style={{ width: 70, fontSize: '0.75rem', padding: '0.2rem 0.3rem', textAlign: 'center', color: '#f59e0b' }} placeholder="1d6" />
-                      <input className="input" defaultValue={a.type || ''}
-                        onBlur={e => { if (e.target.value !== a.type) updateAttack(i, { type: e.target.value }) }}
+                      <EditInput value={a.type || ''} onSave={v => updateAttack(i, { type: v })}
                         style={{ width: 60, fontSize: '0.7rem', padding: '0.2rem 0.3rem' }} placeholder="Tipo" />
                       <button className="btn-icon" style={{ padding: 2 }} title="Elimina" onClick={() => removeAttack(i)}><X size={12} color="#ef4444" /></button>
                     </div>
@@ -701,8 +727,7 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
                       <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: 6, fontWeight: 600 }}>TRUCCHETTI</div>
                       {c.spells.cantrips?.map((s, i) => editMode ? (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                          <input className="input" defaultValue={s}
-                            onBlur={e => { if (e.target.value !== s) updateCantrip(i, e.target.value) }}
+                          <EditInput value={s} onSave={v => updateCantrip(i, v)}
                             style={{ flex: 1, fontSize: '0.8rem', padding: '0.25rem 0.5rem' }} />
                           <button className="btn-icon" style={{ padding: 2 }} title="Elimina" onClick={() => removeCantrip(i)}><X size={12} color="#ef4444" /></button>
                         </div>
@@ -727,8 +752,7 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
                         <div style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: 4, fontWeight: 600 }}>LIVELLO {lv}</div>
                         {lvSpells.map((s, i) => editMode ? (
                           <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                            <input className="input" defaultValue={s.name}
-                              onBlur={e => { if (e.target.value !== s.name) updateSpell(c.spells.spells.indexOf(s), { name: e.target.value }) }}
+                            <EditInput value={s.name} onSave={v => updateSpell(c.spells.spells.indexOf(s), { name: v })}
                               style={{ flex: 1, fontSize: '0.8rem', padding: '0.25rem 0.5rem' }} />
                             <button className="btn-icon" style={{ padding: 2 }} title="Elimina" onClick={() => removeSpell(c.spells.spells.indexOf(s))}><X size={12} color="#ef4444" /></button>
                           </div>
@@ -765,10 +789,9 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
                 {c.equipment?.map((item, i) => editMode ? (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ color: '#d97706', fontSize: '0.7rem' }}>◆</span>
-                    <input
-                      className="input"
-                      defaultValue={item}
-                      onBlur={e => { if (e.target.value !== item) updateEquipment(i, e.target.value) }}
+                    <EditInput
+                      value={item}
+                      onSave={v => updateEquipment(i, v)}
                       style={{ flex: 1, fontSize: '0.8rem', padding: '0.25rem 0.5rem' }}
                     />
                     <button className="btn-icon" style={{ padding: 2 }} title="Elimina" onClick={() => removeEquipment(i)}><X size={12} color="#ef4444" /></button>
@@ -790,10 +813,9 @@ export default function CharacterSheet({ character: c, isDM, onUpdate, onBack, o
               <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 {c.traits?.map((t, i) => editMode ? (
                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <input
-                      className="input"
-                      defaultValue={t}
-                      onBlur={e => { if (e.target.value !== t) updateTrait(i, e.target.value) }}
+                    <EditInput
+                      value={t}
+                      onSave={v => updateTrait(i, v)}
                       style={{ flex: 1, fontSize: '0.8rem', padding: '0.25rem 0.5rem', color: '#a78bfa' }}
                     />
                     <button className="btn-icon" style={{ padding: 2 }} title="Elimina" onClick={() => removeTrait(i)}><X size={12} color="#ef4444" /></button>

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Wand2, BookOpen, Scroll, Table2, RefreshCw, Search, X, Info, Users } from 'lucide-react'
+import { Wand2, BookOpen, Scroll, Table2, RefreshCw, Search, X, Info, Users, Dice6 } from 'lucide-react'
 import { MONSTERS } from '../../data/monsters_it'
 import { ITEMS, ITEMS_BY_RARITY, findItem } from '../../data/items_it'
 import { CLASSI_INCANTATORI, getSpellClasses } from '../../data/spell_classes'
@@ -1027,6 +1027,9 @@ function TabelleTab() {
 }
 
 // ─── Giocatori Tab — DM assegna PG ai giocatori ─────────────────────────────
+// Nota: la policy RLS "profiles_all" blocca update su profili altrui, per cui
+// l'assegnazione è salvata in characters.data.assigned_profile_id (scrivibile
+// da tutti gli autenticati) invece di profiles.character_id.
 function GiocatoriTab() {
   const [profiles, setProfiles] = useState([])
   const [characters, setCharacters] = useState([])
@@ -1040,39 +1043,55 @@ function GiocatoriTab() {
       supabase.from('characters').select('id, data'),
     ]).then(([{ data: pData }, { data: cData }]) => {
       setProfiles(pData || [])
-      setCharacters((cData || []).map(r => ({ id: r.id, name: r.data?.name || r.id, player_name: r.data?.player_name })))
+      setCharacters((cData || []).map(r => ({
+        id: r.id,
+        name: r.data?.name || r.id,
+        player_name: r.data?.player_name,
+        assigned_profile_id: r.data?.assigned_profile_id || null,
+      })))
       setLoading(false)
     })
   }, [])
 
   async function setCharForProfile(profile, charId) {
     setSavingId(profile.id)
-    const { error } = await supabase
-      .from('profiles')
-      .update({ character_id: charId || null })
-      .eq('id', profile.id)
-    if (!error) {
-      // sincronizza anche player_name del personaggio (auto da username)
-      if (charId) {
-        const c = characters.find(c => c.id === charId)
-        const playerName = profile.username || profile.email
-        if (c && playerName && c.player_name !== playerName) {
-          const { data: full } = await supabase.from('characters').select('data').eq('id', charId).single()
-          if (full) {
-            const updated = { ...full.data, player_name: playerName }
-            await supabase.from('characters')
-              .update({ data: updated, updated_at: new Date().toISOString() })
-              .eq('id', charId)
-          }
+    try {
+      // Rimuovi assegnazione dal personaggio precedente (se diverso)
+      const prevChar = characters.find(c => c.assigned_profile_id === profile.id)
+      if (prevChar && prevChar.id !== charId) {
+        const { data: prevFull } = await supabase.from('characters').select('data').eq('id', prevChar.id).single()
+        if (prevFull) {
+          const upd = { ...prevFull.data }
+          delete upd.assigned_profile_id
+          await supabase.from('characters').update({ data: upd, updated_at: new Date().toISOString() }).eq('id', prevChar.id)
         }
       }
-      setProfiles(prev => prev.map(p => p.id === profile.id ? { ...p, character_id: charId || null } : p))
+
+      // Assegna il nuovo personaggio
+      if (charId) {
+        const { data: full } = await supabase.from('characters').select('data').eq('id', charId).single()
+        if (full) {
+          const playerName = profile.username || profile.email
+          const upd = { ...full.data, assigned_profile_id: profile.id, ...(playerName ? { player_name: playerName } : {}) }
+          await supabase.from('characters').update({ data: upd, updated_at: new Date().toISOString() }).eq('id', charId)
+        }
+      }
+
+      // Tenta anche l'update del profilo (funziona solo per il proprio profilo via RLS)
+      await supabase.from('profiles').update({ character_id: charId || null }).eq('id', profile.id)
+
+      // Aggiorna stato locale
+      setCharacters(prev => prev.map(c => {
+        if (c.id === prevChar?.id && c.id !== charId) return { ...c, assigned_profile_id: null }
+        if (c.id === charId) return { ...c, assigned_profile_id: profile.id }
+        return c
+      }))
       setMsg('Salvato.')
-    } else {
-      setMsg('Errore: ' + error.message)
+    } catch (e) {
+      setMsg('Errore: ' + (e.message || 'sconosciuto'))
     }
     setSavingId(null)
-    setTimeout(() => setMsg(null), 2000)
+    setTimeout(() => setMsg(null), 2500)
   }
 
   async function setRole(profile, role) {
@@ -1098,7 +1117,7 @@ function GiocatoriTab() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {profiles.map(p => {
-          const assignedChar = characters.find(c => c.id === p.character_id)
+          const assignedChar = characters.find(c => c.assigned_profile_id === p.id)
           return (
             <div key={p.id} className="card" style={{ padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
               <div style={{ flex: '1 1 200px', minWidth: 180 }}>
@@ -1111,7 +1130,7 @@ function GiocatoriTab() {
                 <option value="dm">Dungeon Master</option>
               </select>
 
-              <select className="select" value={p.character_id || ''} onChange={e => setCharForProfile(p, e.target.value)} style={{ flex: '1 1 200px', minWidth: 180 }}>
+              <select className="select" value={assignedChar?.id || ''} onChange={e => setCharForProfile(p, e.target.value)} style={{ flex: '1 1 200px', minWidth: 180 }}>
                 <option value="">— Nessun personaggio —</option>
                 {characters.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -1133,6 +1152,7 @@ const TABS = [
   { id: 'magie', label: 'Magie', icon: Scroll },
   { id: 'oggetti', label: 'Oggetti', icon: Info },
   { id: 'tabelle', label: 'Tabelle', icon: Table2 },
+  { id: 'dadi', label: 'Dadi', icon: Dice6 },
   { id: 'giocatori', label: 'Giocatori', icon: Users },
 ]
 
@@ -1144,11 +1164,6 @@ export default function DMToolsPage() {
     <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100dvh - 6rem)', overflow: 'hidden' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem', flexShrink: 0 }}>
         <h1 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, color: '#f1f5f9' }}>Strumenti DM</h1>
-      </div>
-
-      {/* Dice widget — always visible at top */}
-      <div style={{ marginBottom: '0.875rem', flexShrink: 0 }}>
-        <DiceWidget />
       </div>
 
       <div style={{ display: 'flex', gap: 4, marginBottom: '1rem', flexShrink: 0, flexWrap: 'wrap' }}>
@@ -1172,6 +1187,7 @@ export default function DMToolsPage() {
         {tab === 'magie' && <MagieTab onSelect={setSelected} />}
         {tab === 'oggetti' && <OggettiTab onSelect={setSelected} />}
         {tab === 'tabelle' && <TabelleTab />}
+        {tab === 'dadi' && <DiceWidget />}
         {tab === 'giocatori' && <GiocatoriTab />}
       </div>
 
